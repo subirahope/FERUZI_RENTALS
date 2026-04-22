@@ -197,17 +197,57 @@ def create_receipt_pdf(rental_data):
     styles = getSampleStyleSheet()
     story = []
     
-    # Add logo
-    for possible_logo in ["feruzi_logo.png", "logo.png", "favicon.ico"]:
-        if os.path.exists(possible_logo):
+    # ========================================================================
+    # ADD LOGO TO PDF - Using the same logic as the app
+    # ========================================================================
+    
+    logo_added = False
+    
+    # Try to get logo from various sources
+    logo_paths_to_try = [
+        "feruzi_logo.png",
+        "logo.png", 
+        "favicon.ico",
+        os.path.join(APP_DIR, "feruzi_logo.png"),
+        os.path.join(APP_DIR, "logo.png"),
+    ]
+    
+    for logo_path in logo_paths_to_try:
+        if os.path.exists(logo_path):
             try:
-                img = Image(possible_logo, width=2*inch, height=2*inch)
+                img = Image(logo_path, width=2*inch, height=2*inch)
                 img.hAlign = 'CENTER'
                 story.append(img)
                 story.append(Spacer(1, 0.2*inch))
+                logo_added = True
                 break
-            except:
+            except Exception as e:
                 continue
+    
+    # If no local logo found, try to use base64 encoded logo from get_logo_image()
+    if not logo_added:
+        logo_base64_data = get_logo_image()
+        if logo_base64_data:
+            try:
+                # Decode base64 to bytes and save temporarily
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                    tmp_file.write(base64.b64decode(logo_base64_data))
+                    tmp_path = tmp_file.name
+                
+                img = Image(tmp_path, width=2*inch, height=2*inch)
+                img.hAlign = 'CENTER'
+                story.append(img)
+                story.append(Spacer(1, 0.2*inch))
+                logo_added = True
+                
+                # Clean up temp file
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+            except Exception as e:
+                pass
     
     # Company header
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
