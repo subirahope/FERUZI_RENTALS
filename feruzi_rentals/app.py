@@ -1,4 +1,4 @@
-# app.py - Updated with centered logo
+# app.py - Updated with non-refundable deposit (deposit is part of total cost)
 import streamlit as st
 import pandas as pd
 import datetime
@@ -14,20 +14,35 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import io
 from PIL import Image as PILImage
 import base64
+import requests
 
 # Function to format currency in KES
 def format_kes(amount):
     return f"KES {amount:,.2f}"
 
+# Function to get logo from various sources
+def get_logo_image():
+    """Try to load logo from multiple sources"""
+    
+    # Method 1: Check local file
+    if os.path.exists("feruzi_logo.png"):
+        with open("feruzi_logo.png", "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    
+    # Method 2: Check for logo in current directory with different names
+    for logo_name in ["logo.png", "feruzi_logo.jpg", "logo.jpg", "feruzi.png"]:
+        if os.path.exists(logo_name):
+            with open(logo_name, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    
+    return None
+
 # Page configuration with favicon
-favicon_path = "feruzi_logo.png"
-if os.path.exists(favicon_path):
-    with open(favicon_path, "rb") as f:
-        favicon_bytes = f.read()
-        favicon_base64 = base64.b64encode(favicon_bytes).decode()
+logo_base64 = get_logo_image()
+if logo_base64:
     st.set_page_config(
         page_title="Feruzi Rentals - Camera Inventory System",
-        page_icon=f"data:image/png;base64,{favicon_base64}",
+        page_icon=f"data:image/png;base64,{logo_base64}",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -72,18 +87,15 @@ st.markdown("""
         color: #2c3e50;
         margin-top: 0.5rem;
     }
-    /* Center align the logo container */
     .stImage {
         display: flex;
         justify-content: center;
     }
-    /* Center the logo in the dashboard */
     .centered-logo {
         display: flex;
         justify-content: center;
         margin-bottom: 1rem;
     }
-    /* Center content in columns */
     .centered {
         text-align: center;
     }
@@ -154,9 +166,9 @@ def load_sample_data():
             'item_name': 'Nikon Z6',
             'rental_date': datetime.date.today() - timedelta(days=2),
             'return_date': datetime.date.today() + timedelta(days=3),
-            'total_cost': 22500.0,
+            'total_cost': 22500.0,  # This now includes deposit
             'status': 'Active',
-            'deposit_paid': 10000.0
+            'deposit_paid': 10000.0  # This is now part of total cost, not refundable
         }
         st.session_state.rentals = pd.DataFrame([sample_rental])
 
@@ -176,7 +188,7 @@ def load_data():
         if 'return_date' in st.session_state.rentals.columns:
             st.session_state.rentals['return_date'] = pd.to_datetime(st.session_state.rentals['return_date']).dt.date
 
-# Function to create receipt PDF with logo
+# Function to create receipt PDF with centered tagline
 def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
@@ -185,15 +197,16 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     story = []
     
     # Add logo if exists
+    logo_found = False
     if os.path.exists(logo_path):
         try:
-            # Load and resize logo for PDF
             img = Image(logo_path, width=2*inch, height=2*inch)
             img.hAlign = 'CENTER'
             story.append(img)
             story.append(Spacer(1, 0.2*inch))
+            logo_found = True
         except Exception as e:
-            st.warning(f"Could not load logo for PDF: {e}")
+            pass
     
     # Company header
     title_style = ParagraphStyle(
@@ -202,18 +215,27 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
         fontSize=24,
         textColor=colors.HexColor('#2c3e50'),
         alignment=TA_CENTER,
-        spaceAfter=30
+        spaceAfter=10
     )
     
     story.append(Paragraph("FERUZI RENTALS", title_style))
-    story.append(Paragraph("FILM.PHOTOGRAPHY.POSSIBILITY.", styles['Normal']))
-    story.append(Spacer(1, 0.3*inch))
+    
+    # Centered tagline
+    tagline_style = ParagraphStyle(
+        'Tagline',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#7f8c8d'),
+        alignment=TA_CENTER,
+        spaceAfter=30
+    )
+    story.append(Paragraph("FILM.PHOTOGRAPHY.POSSIBILITY.", tagline_style))
     
     # Receipt title
     receipt_title = ParagraphStyle(
         'ReceiptTitle',
         parent=styles['Heading2'],
-        fontSize=18,
+        fontSize=16,
         textColor=colors.HexColor('#34495e'),
         alignment=TA_CENTER,
         spaceAfter=20
@@ -242,17 +264,20 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     story.append(customer_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Rental details
+    # Rental details (deposit is now part of total, not shown separately as refundable)
     daily_rate = rental_data.get('daily_rate', 0)
+    days = (rental_data['return_date'] - rental_data['rental_date']).days
+    rental_subtotal = days * daily_rate
+    
     rental_details = [
         ['Item Rented:', rental_data['item_name']],
         ['Rental Date:', rental_data['rental_date'].strftime('%Y-%m-%d')],
         ['Return Date:', rental_data['return_date'].strftime('%Y-%m-%d')],
-        ['Duration (Days):', str((rental_data['return_date'] - rental_data['rental_date']).days)],
+        ['Duration (Days):', str(days)],
         ['Daily Rate:', f"KES {daily_rate:,.2f}"],
-        ['Subtotal:', f"KES {rental_data.get('total_cost', 0) - rental_data.get('deposit_paid', 0):,.2f}"],
-        ['Deposit Paid:', f"KES {rental_data.get('deposit_paid', 0):,.2f}"],
-        ['Total Paid:', f"KES {rental_data.get('total_cost', 0):,.2f}"]
+        ['Rental Subtotal:', f"KES {rental_subtotal:,.2f}"],
+        ['Deposit (Non-refundable):', f"KES {rental_data.get('deposit_paid', 0):,.2f}"],
+        ['Total Amount Due:', f"KES {rental_data.get('total_cost', 0):,.2f}"]
     ]
     
     rental_table = Table(rental_details, colWidths=[1.5*inch, 3*inch])
@@ -264,11 +289,24 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('BACKGROUND', (7, 0), (7, 0), colors.HexColor('#d4edda')),  # Highlight total
+        ('TEXTCOLOR', (7, 0), (7, 0), colors.HexColor('#155724')),
     ]))
     story.append(rental_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Terms and conditions
+    # Payment status
+    payment_style = ParagraphStyle(
+        'PaymentStatus',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#28a745'),
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+    story.append(Paragraph("<b>✓ Payment Received in Full</b>", payment_style))
+    
+    # Terms and conditions (updated to reflect non-refundable deposit)
     terms_style = ParagraphStyle(
         'Terms',
         parent=styles['Normal'],
@@ -282,7 +320,8 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     1. Items must be returned by the specified return date<br/>
     2. Late returns will incur additional daily charges of KES 500 per day<br/>
     3. Customer is responsible for any damage to equipment<br/>
-    4. Deposit is refundable upon return of undamaged equipment
+    4. Deposit is non-refundable and is part of the total rental cost<br/>
+    5. Late fees will be charged for overdue equipment
     """
     
     story.append(Paragraph(terms_text, terms_style))
@@ -304,14 +343,11 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
 
 # Function to display centered logo
 def display_centered_logo(logo_path="feruzi_logo.png", width=200):
-    if os.path.exists(logo_path):
-        # Use HTML to center the image
-        with open(logo_path, "rb") as img_file:
-            img_base64 = base64.b64encode(img_file.read()).decode()
-        
+    logo_base64_local = get_logo_image()
+    if logo_base64_local:
         centered_logo_html = f"""
         <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
-            <img src="data:image/png;base64,{img_base64}" width="{width}" style="object-fit: contain;">
+            <img src="data:image/png;base64,{logo_base64_local}" width="{width}" style="object-fit: contain;">
         </div>
         """
         st.markdown(centered_logo_html, unsafe_allow_html=True)
@@ -328,16 +364,12 @@ def main():
     # Sidebar with centered logo
     st.sidebar.markdown("---")
     
-    # Center logo in sidebar using columns
-    logo_path = "feruzi_logo.png"
-    if os.path.exists(logo_path):
-        # Create columns to center the logo in sidebar
+    # Center logo in sidebar
+    logo_base64_sidebar = get_logo_image()
+    if logo_base64_sidebar:
         col1, col2, col3 = st.sidebar.columns([1, 2, 1])
         with col2:
-            try:
-                st.image(logo_path, use_container_width=True)
-            except:
-                st.markdown("### 📷 FERUZI RENTALS")
+            st.sidebar.image(f"data:image/png;base64,{logo_base64_sidebar}", use_container_width=True)
     else:
         st.sidebar.markdown("### 📷 FERUZI RENTALS")
         st.sidebar.markdown("*Film.Photography.Possibility.*")
@@ -352,13 +384,12 @@ def main():
     
     # Dashboard
     if menu == "Dashboard":
-        # Display centered logo at the top of dashboard
         st.markdown("---")
         
-        # Center the logo using columns
+        # Center the logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=250)
+            display_centered_logo(width=250)
         
         # Company name and tagline centered
         st.markdown('<h1 class="main-header">FERUZI RENTALS</h1>', unsafe_allow_html=True)
@@ -401,10 +432,9 @@ def main():
     
     # Inventory Management
     elif menu == "Inventory Management":
-        # Display small centered logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=150)
+            display_centered_logo(width=150)
         
         st.markdown('<h1 class="main-header">Inventory Management</h1>', unsafe_allow_html=True)
         
@@ -501,10 +531,9 @@ def main():
     
     # New Rental
     elif menu == "New Rental":
-        # Display small centered logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=150)
+            display_centered_logo(width=150)
         
         st.markdown('<h1 class="main-header">Create New Rental</h1>', unsafe_allow_html=True)
         
@@ -539,13 +568,17 @@ def main():
                 with col4:
                     return_date = st.date_input("Return Date", datetime.date.today() + timedelta(days=3))
                 with col5:
-                    deposit = st.number_input("Deposit Amount (KES)*", min_value=0.0, value=5000.0, step=1000.0)
+                    deposit = st.number_input("Deposit Amount (KES)*", min_value=0.0, value=5000.0, step=1000.0, 
+                                             help="Deposit is non-refundable and part of the total cost")
                 
                 if rental_date and return_date:
                     days = (return_date - rental_date).days
                     if days > 0:
-                        total = days * daily_rate
-                        st.success(f"💰 Total Cost: {format_kes(total)} for {days} days")
+                        rental_subtotal = days * daily_rate
+                        total_cost = rental_subtotal + deposit
+                        st.success(f"💰 Rental Subtotal: {format_kes(rental_subtotal)} for {days} days")
+                        st.info(f"💰 Deposit (non-refundable): {format_kes(deposit)}")
+                        st.info(f"💰 Total Amount Due: {format_kes(total_cost)}")
                     else:
                         st.error("Return date must be after rental date!")
                 
@@ -556,7 +589,8 @@ def main():
                 if customer_name and customer_email and customer_phone and selected_item:
                     days = (return_date - rental_date).days
                     if days > 0:
-                        total = days * daily_rate
+                        rental_subtotal = days * daily_rate
+                        total_cost = rental_subtotal + deposit
                         rental_id = f"RENT{str(uuid.uuid4())[:8].upper()}"
                         
                         new_rental = pd.DataFrame([{
@@ -568,7 +602,7 @@ def main():
                             'item_name': selected_item,
                             'rental_date': rental_date,
                             'return_date': return_date,
-                            'total_cost': total + deposit,
+                            'total_cost': total_cost,
                             'status': 'Active',
                             'deposit_paid': deposit,
                             'daily_rate': daily_rate
@@ -595,6 +629,7 @@ def main():
             # Show download button after rental is created
             if st.session_state.rental_created and st.session_state.last_rental_data:
                 st.success(f"✅ Rental created successfully! Rental ID: {st.session_state.last_rental_data['rental_id']}")
+                st.info("💰 Deposit is non-refundable and has been included in the total amount")
                 
                 # Generate receipt with logo
                 pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data, "feruzi_logo.png")
@@ -618,10 +653,9 @@ def main():
     
     # Active Rentals
     elif menu == "Active Rentals":
-        # Display small centered logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=150)
+            display_centered_logo(width=150)
         
         st.markdown('<h1 class="main-header">Active Rentals</h1>', unsafe_allow_html=True)
         
@@ -642,20 +676,19 @@ def main():
                         st.write(f"**Rental Date:** {rental['rental_date']}")
                         st.write(f"**Return Date:** {rental['return_date']}")
                     with col2:
-                        st.write(f"**Total Cost:** {format_kes(rental['total_cost'])}")
-                        st.write(f"**Deposit:** {format_kes(rental['deposit_paid'])}")
+                        st.write(f"**Total Amount Paid:** {format_kes(rental['total_cost'])}")
+                        st.write(f"**Deposit (Non-refundable):** {format_kes(rental['deposit_paid'])}")
                         days_left = (rental['return_date'] - datetime.date.today()).days
                         if days_left >= 0:
                             st.info(f"⏰ {days_left} days left until return")
                         else:
                             st.warning(f"⚠️ Rental is {abs(days_left)} days overdue!")
     
-    # Return Item
+    # Return Item (simplified - no refund calculations)
     elif menu == "Return Item":
-        # Display small centered logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=150)
+            display_centered_logo(width=150)
         
         st.markdown('<h1 class="main-header">Process Item Return</h1>', unsafe_allow_html=True)
         
@@ -679,24 +712,30 @@ def main():
                     st.write(f"**Rental Date:** {rental_data['rental_date']}")
                 with col2:
                     st.write(f"**Return Date:** {rental_data['return_date']}")
-                    st.write(f"**Deposit Paid:** {format_kes(rental_data['deposit_paid'])}")
+                    st.write(f"**Total Paid:** {format_kes(rental_data['total_cost'])}")
+                    st.write(f"**Deposit (Non-refundable):** {format_kes(rental_data['deposit_paid'])}")
                 
                 # Calculate late fees if any
                 today = datetime.date.today()
+                late_fee = 0
                 if today > rental_data['return_date']:
                     days_late = (today - rental_data['return_date']).days
                     late_fee = days_late * 500
-                    st.warning(f"⚠️ Rental is {days_late} days late. Late fee: {format_kes(late_fee)}")
+                    st.warning(f"⚠️ Rental is {days_late} days late. Late fee due: {format_kes(late_fee)}")
                 else:
-                    late_fee = 0
+                    st.success("✅ Returned on time!")
                 
                 col3, col4 = st.columns(2)
                 with col3:
-                    damage_fee = st.number_input("Damage Fee (KES)", min_value=0.0, step=500.0, value=0.0)
+                    damage_fee = st.number_input("Damage Fee (KES)", min_value=0.0, step=500.0, value=0.0,
+                                                help="Additional fee for damaged equipment")
                 with col4:
-                    condition_notes = st.text_area("Condition Notes", placeholder="Any damage or issues with returned equipment?")
+                    condition_notes = st.text_area("Condition Notes", placeholder="Any issues with returned equipment?")
                 
                 if st.button("Process Return"):
+                    # Calculate any additional payment due
+                    additional_payment = late_fee + damage_fee
+                    
                     # Update rental status
                     st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'status'] = 'Completed'
                     
@@ -704,26 +743,23 @@ def main():
                     st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'status'] = 'Available'
                     st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'current_renter'] = ''
                     
-                    # Calculate refund
-                    deposit_refund = rental_data['deposit_paid'] - damage_fee - late_fee
-                    
                     save_data()
                     
                     st.success("✅ Return processed successfully!")
                     
-                    if deposit_refund > 0:
-                        st.info(f"💰 Deposit refund amount: {format_kes(deposit_refund)}")
-                    elif deposit_refund < 0:
-                        st.warning(f"⚠️ Additional payment due: {format_kes(abs(deposit_refund))}")
+                    if additional_payment > 0:
+                        st.warning(f"💰 Additional payment due: {format_kes(additional_payment)}")
+                        st.info("Deposit is non-refundable and was included in the original payment")
+                    else:
+                        st.info("✅ No additional fees. Thank you for returning the equipment on time!")
                     
                     st.balloons()
     
     # Rental History
     elif menu == "Rental History":
-        # Display small centered logo
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            display_centered_logo(logo_path, width=150)
+            display_centered_logo(width=150)
         
         st.markdown('<h1 class="main-header">Rental History</h1>', unsafe_allow_html=True)
         
