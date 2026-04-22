@@ -9,6 +9,7 @@ from datetime import timedelta
 import uuid
 import os
 import sys
+import json
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
