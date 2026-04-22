@@ -1,4 +1,4 @@
-# app.py - Updated with proper logo handling
+# app.py - Updated with centered logo
 import streamlit as st
 import pandas as pd
 import datetime
@@ -18,13 +18,6 @@ import base64
 # Function to format currency in KES
 def format_kes(amount):
     return f"KES {amount:,.2f}"
-
-# Function to get base64 encoded logo for favicon and sidebar
-def get_logo_base64(logo_path="feruzi_logo.png"):
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    return None
 
 # Page configuration with favicon
 favicon_path = "feruzi_logo.png"
@@ -46,7 +39,7 @@ else:
         initial_sidebar_state="expanded"
     )
 
-# Custom CSS for better styling
+# Custom CSS for better styling and centered elements
 st.markdown("""
 <style>
     .main-header {
@@ -78,6 +71,21 @@ st.markdown("""
         text-align: center;
         color: #2c3e50;
         margin-top: 0.5rem;
+    }
+    /* Center align the logo container */
+    .stImage {
+        display: flex;
+        justify-content: center;
+    }
+    /* Center the logo in the dashboard */
+    .centered-logo {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+    /* Center content in columns */
+    .centered {
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -294,6 +302,22 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     buffer.seek(0)
     return buffer
 
+# Function to display centered logo
+def display_centered_logo(logo_path="feruzi_logo.png", width=200):
+    if os.path.exists(logo_path):
+        # Use HTML to center the image
+        with open(logo_path, "rb") as img_file:
+            img_base64 = base64.b64encode(img_file.read()).decode()
+        
+        centered_logo_html = f"""
+        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+            <img src="data:image/png;base64,{img_base64}" width="{width}" style="object-fit: contain;">
+        </div>
+        """
+        st.markdown(centered_logo_html, unsafe_allow_html=True)
+        return True
+    return False
+
 # Main app
 def main():
     # Load data
@@ -301,16 +325,19 @@ def main():
     if st.session_state.inventory.empty:
         load_sample_data()
     
-    # Sidebar with logo
+    # Sidebar with centered logo
     st.sidebar.markdown("---")
     
-    # Try to display logo in sidebar
+    # Center logo in sidebar using columns
     logo_path = "feruzi_logo.png"
     if os.path.exists(logo_path):
-        try:
-            st.sidebar.image(logo_path, use_container_width=True)
-        except:
-            st.sidebar.markdown("### FERUZI RENTALS")
+        # Create columns to center the logo in sidebar
+        col1, col2, col3 = st.sidebar.columns([1, 2, 1])
+        with col2:
+            try:
+                st.image(logo_path, use_container_width=True)
+            except:
+                st.markdown("### 📷 FERUZI RENTALS")
     else:
         st.sidebar.markdown("### 📷 FERUZI RENTALS")
         st.sidebar.markdown("*Film.Photography.Possibility.*")
@@ -325,15 +352,18 @@ def main():
     
     # Dashboard
     if menu == "Dashboard":
-        # Display header with logo if available
+        # Display centered logo at the top of dashboard
+        st.markdown("---")
+        
+        # Center the logo using columns
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if os.path.exists(logo_path):
-                try:
-                    st.image(logo_path, width=200)
-                except:
-                    pass
-            st.markdown('<h1 class="main-header">Feruzi Rentals Dashboard</h1>', unsafe_allow_html=True)
+            display_centered_logo(logo_path, width=250)
+        
+        # Company name and tagline centered
+        st.markdown('<h1 class="main-header">FERUZI RENTALS</h1>', unsafe_allow_html=True)
+        st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #7f8c8d;">FILM.PHOTOGRAPHY.POSSIBILITY.</p>', unsafe_allow_html=True)
+        st.markdown("---")
         
         col1, col2, col3, col4 = st.columns(4)
         
@@ -371,6 +401,11 @@ def main():
     
     # Inventory Management
     elif menu == "Inventory Management":
+        # Display small centered logo
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(logo_path, width=150)
+        
         st.markdown('<h1 class="main-header">Inventory Management</h1>', unsafe_allow_html=True)
         
         tab1, tab2, tab3 = st.tabs(["Add New Item", "Edit/Delete Items", "View All Items"])
@@ -466,6 +501,11 @@ def main():
     
     # New Rental
     elif menu == "New Rental":
+        # Display small centered logo
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(logo_path, width=150)
+        
         st.markdown('<h1 class="main-header">Create New Rental</h1>', unsafe_allow_html=True)
         
         available_items = st.session_state.inventory[st.session_state.inventory['status'] == 'Available']
@@ -578,6 +618,11 @@ def main():
     
     # Active Rentals
     elif menu == "Active Rentals":
+        # Display small centered logo
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(logo_path, width=150)
+        
         st.markdown('<h1 class="main-header">Active Rentals</h1>', unsafe_allow_html=True)
         
         active = st.session_state.rentals[st.session_state.rentals['status'] == 'Active']
@@ -607,6 +652,11 @@ def main():
     
     # Return Item
     elif menu == "Return Item":
+        # Display small centered logo
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(logo_path, width=150)
+        
         st.markdown('<h1 class="main-header">Process Item Return</h1>', unsafe_allow_html=True)
         
         active_rentals = st.session_state.rentals[st.session_state.rentals['status'] == 'Active']
@@ -670,6 +720,11 @@ def main():
     
     # Rental History
     elif menu == "Rental History":
+        # Display small centered logo
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(logo_path, width=150)
+        
         st.markdown('<h1 class="main-header">Rental History</h1>', unsafe_allow_html=True)
         
         if st.session_state.rentals.empty:
