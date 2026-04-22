@@ -1,5 +1,0 @@
-item_id,item_name,category,brand,model,serial_number,daily_rate,status,current_renter
-CAM001,Sony A7III,Camera Body,Sony,A7III,SN123456,2500.0,Rented,Hope Subira
-LEN001,Canon 24-70mm f/2.8,Lens,Canon,24-70mm,SN789012,3500.0,Rented,Isaac Ochieng
-CAM002,Nikon Z6,Camera Body,Nikon,Z6,SN345678,45.0,Available,
-Sony,Sony ,Camera Body,Sony,a7rq,9484949,15.0,Available,
