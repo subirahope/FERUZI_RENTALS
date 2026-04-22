@@ -1,0 +1,5 @@
+rental_id,customer_name,customer_email,customer_phone,item_id,item_name,rental_date,return_date,total_cost,status,deposit_paid,daily_rate
+RENT001,John Doe,john@example.com,1234567890,CAM002,Nikon Z6,2026-04-20,2026-04-25,225.0,Completed,200.0,
+RENT83974491,Isaac Ochieng,isaac@gmail.com,707610742,LEN001,Canon 24-70mm f/2.8,2026-04-22,2026-04-25,155.0,Active,50.0,
+RENT96D96B14,Hope Subira,subirahope49@gmail.com,758301424,CAM001,Sony A7III,2026-04-22,2026-04-25,12500.0,Completed,5000.0,2500.0
+RENTCBBE9C44,Hope Subira,subirahope49@gmail.com,0707610742,CAM001,Sony A7III,2026-04-22,2026-04-25,12500.0,Active,5000.0,2500.0
