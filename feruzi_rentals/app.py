@@ -933,11 +933,13 @@ def main():
                     st.session_state.last_rental_data = None
                     st.rerun()
     
+   
+    
     # ========================================================================
-    # ACTIVE RENTALS
+    # ACTIVE RENTALS (Multi-Item Support)
     # ========================================================================
     
-   elif menu == "Active Rentals":
+    elif menu == "Active Rentals":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             display_centered_logo(width=150)
@@ -1024,7 +1026,7 @@ def main():
                 late_fee = 0
                 if today > rental_data['return_date']:
                     days_late = (today - rental_data['return_date']).days
-                    late_fee = days_late * 500 * len(items)  # KES 500 per day per item
+                    late_fee = days_late * 500 * len(items)
                     st.warning(f"⚠️ {days_late} days late. Late fee: {format_kes(late_fee)}")
                 
                 col3, col4 = st.columns(2)
@@ -1093,16 +1095,30 @@ def main():
             else:
                 filtered = st.session_state.rentals[st.session_state.rentals['status'] == status_filter]
             
-            display_filtered = filtered.copy()
-            if 'total_cost' in display_filtered.columns:
-                display_filtered['total_cost'] = display_filtered['total_cost'].apply(lambda x: format_kes(x))
-            if 'deposit_paid' in display_filtered.columns:
-                display_filtered['deposit_paid'] = display_filtered['deposit_paid'].apply(lambda x: format_kes(x))
-            if 'balance_due' in display_filtered.columns:
-                display_filtered['balance_due'] = display_filtered['balance_due'].apply(lambda x: format_kes(x))
+            for _, rental in filtered.iterrows():
+                with st.expander(f"Rental #{rental['rental_id']} - {rental['customer_name']} - {rental['status']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Customer:** {rental['customer_name']}")
+                        st.write(f"**Email:** {rental['customer_email']}")
+                        st.write(f"**Phone:** {rental['customer_phone']}")
+                    with col2:
+                        st.write(f"**Rental Date:** {rental['rental_date']}")
+                        st.write(f"**Return Date:** {rental['return_date']}")
+                        st.write(f"**Status:** {rental['status']}")
+                    
+                    # Show items
+                    st.write("**Items Rented:**")
+                    import json
+                    items = json.loads(rental['items_list'])
+                    for item in items:
+                        st.write(f"  • {item['item_name']} - {format_kes(item['daily_rate'])}/day")
+                    
+                    st.write(f"**Total Cost:** {format_kes(rental['total_cost'])}")
+                    st.write(f"**Deposit Paid:** {format_kes(rental['deposit_paid'])}")
+                    st.write(f"**Balance Due:** {format_kes(rental['balance_due'])}")
             
-            st.dataframe(display_filtered[['rental_id', 'customer_name', 'item_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']], use_container_width=True)
-            
+            # Statistics
             st.markdown("---")
             st.subheader("📈 Rental Statistics")
             
@@ -1139,8 +1155,8 @@ def main():
                 # Clear rentals
                 st.session_state.rentals = pd.DataFrame(columns=[
                     'rental_id', 'customer_name', 'customer_email', 'customer_phone',
-                    'item_id', 'item_name', 'rental_date', 'return_date', 
-                    'total_cost', 'deposit_paid', 'balance_due', 'status', 'daily_rate'
+                    'items_list', 'total_cost', 'deposit_paid', 'balance_due', 
+                    'rental_date', 'return_date', 'status'
                 ])
                 
                 # Load fresh sample data
@@ -1178,7 +1194,7 @@ def main():
         
         st.subheader("Current Rentals")
         if not st.session_state.rentals.empty:
-            st.dataframe(st.session_state.rentals[['rental_id', 'customer_name', 'item_name', 'status']], use_container_width=True)
+            st.dataframe(st.session_state.rentals[['rental_id', 'customer_name', 'status']], use_container_width=True)
         else:
             st.info("No rental records")
 
