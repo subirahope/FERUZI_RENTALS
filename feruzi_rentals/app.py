@@ -103,24 +103,33 @@ else:
         initial_sidebar_state="expanded"
     )
 
-# Custom CSS
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #2c3e50;
-        text-align: center;
-        padding: 1rem;
+    /* Force dark text on all metric boxes */
+    div[data-testid="stMetric"] {
+        background-color: #f0f2f6 !important;
+        border: 1px solid #ddd !important;
+        border-radius: 10px !important;
+        padding: 15px !important;
     }
-    .centered-logo {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 1rem;
+    
+    div[data-testid="stMetric"] p {
+        color: #1f1f1f !important;
     }
-    .stMetric {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
+    
+    div[data-testid="stMetricLabel"] p {
+        color: #2c3e50 !important;
+        font-weight: bold !important;
+    }
+    
+    div[data-testid="stMetricValue"] {
+        color: #0066cc !important;
+        font-weight: bold !important;
+    }
+    
+    /* Make all text in metrics visible */
+    .stMetric .stMarkdown {
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
