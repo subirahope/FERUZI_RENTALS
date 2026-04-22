@@ -505,7 +505,7 @@ def main():
                 csv = st.session_state.inventory.to_csv(index=False)
                 st.download_button("Download Inventory CSV", csv, "inventory_export.csv", "text/csv")
     
-    # NEW RENTAL
+       # NEW RENTAL
     elif menu == "New Rental":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -565,8 +565,12 @@ def main():
                 if customer_name and customer_email and customer_phone and selected_item:
                     days = (return_date - rental_date).days
                     if days > 0:
-                        total_cost = days * daily_rate
+                        # Use the daily_rate from the selected item
+                        current_daily_rate = item_details['daily_rate']
+                        total_cost = days * current_daily_rate
                         balance_due = total_cost - deposit
+                        
+                        st.write(f"DEBUG: days={days}, daily_rate={current_daily_rate}, total_cost={total_cost}, deposit={deposit}, balance_due={balance_due}")
                         
                         if balance_due < 0:
                             st.error("Deposit cannot exceed total rental cost!")
@@ -586,7 +590,7 @@ def main():
                                 'deposit_paid': deposit,
                                 'balance_due': balance_due,
                                 'status': 'Active',
-                                'daily_rate': daily_rate
+                                'daily_rate': current_daily_rate
                             }])
                             
                             st.session_state.rentals = pd.concat([st.session_state.rentals, new_rental], ignore_index=True)
@@ -604,12 +608,28 @@ def main():
                     st.error("Please fill in all customer information!")
             
             if st.session_state.rental_created and st.session_state.last_rental_data:
-                correct_balance = st.session_state.last_rental_data['total_cost'] - st.session_state.last_rental_data['deposit_paid']
+                # Recalculate to ensure accuracy
+                days_calc = (st.session_state.last_rental_data['return_date'] - st.session_state.last_rental_data['rental_date']).days
+                correct_total = days_calc * st.session_state.last_rental_data['daily_rate']
+                correct_balance = correct_total - st.session_state.last_rental_data['deposit_paid']
+                
+                st.write(f"DEBUG RECALC: days={days_calc}, daily_rate={st.session_state.last_rental_data['daily_rate']}, correct_total={correct_total}, stored_total={st.session_state.last_rental_data['total_cost']}")
                 
                 st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
-                st.info(f"💰 Total Rental Cost: {format_kes(st.session_state.last_rental_data['total_cost'])}")
+                st.info(f"💰 Total Rental Cost: {format_kes(correct_total)}")
                 st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
                 st.info(f"💰 Balance due on return: {format_kes(correct_balance)}")
+                
+                # Fix the stored data if it's wrong
+                if correct_total != st.session_state.last_rental_data['total_cost']:
+                    st.error(f"⚠️ Data mismatch detected! Fixing total from {st.session_state.last_rental_data['total_cost']} to {correct_total}")
+                    idx = st.session_state.rentals[st.session_state.rentals['rental_id'] == st.session_state.last_rental_data['rental_id']].index
+                    if len(idx) > 0:
+                        st.session_state.rentals.loc[idx[0], 'total_cost'] = correct_total
+                        st.session_state.rentals.loc[idx[0], 'balance_due'] = correct_balance
+                        save_data()
+                        st.session_state.last_rental_data['total_cost'] = correct_total
+                        st.session_state.last_rental_data['balance_due'] = correct_balance
                 
                 pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data)
                 
