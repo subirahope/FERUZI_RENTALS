@@ -505,7 +505,7 @@ def main():
                 csv = st.session_state.inventory.to_csv(index=False)
                 st.download_button("Download Inventory CSV", csv, "inventory_export.csv", "text/csv")
     
-       # NEW RENTAL
+           # NEW RENTAL
     elif menu == "New Rental":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -531,7 +531,7 @@ def main():
                 with col2:
                     selected_item = st.selectbox("Select Item to Rent*", available_items['item_name'].tolist())
                     item_details = available_items[available_items['item_name'] == selected_item].iloc[0]
-                    daily_rate = item_details['daily_rate']
+                    daily_rate = float(item_details['daily_rate'])
                     st.info(f"Daily Rate: {format_kes(daily_rate)}")
                 
                 col3, col4, col5 = st.columns(3)
@@ -566,11 +566,9 @@ def main():
                     days = (return_date - rental_date).days
                     if days > 0:
                         # Use the daily_rate from the selected item
-                        current_daily_rate = item_details['daily_rate']
+                        current_daily_rate = float(item_details['daily_rate'])
                         total_cost = days * current_daily_rate
                         balance_due = total_cost - deposit
-                        
-                        st.write(f"DEBUG: days={days}, daily_rate={current_daily_rate}, total_cost={total_cost}, deposit={deposit}, balance_due={balance_due}")
                         
                         if balance_due < 0:
                             st.error("Deposit cannot exceed total rental cost!")
@@ -582,20 +580,23 @@ def main():
                                 'customer_name': customer_name,
                                 'customer_email': customer_email,
                                 'customer_phone': customer_phone,
-                                'item_id': item_details['item_id'],
+                                'item_id': str(item_details['item_id']),
                                 'item_name': selected_item,
                                 'rental_date': rental_date,
                                 'return_date': return_date,
-                                'total_cost': total_cost,
-                                'deposit_paid': deposit,
-                                'balance_due': balance_due,
+                                'total_cost': float(total_cost),
+                                'deposit_paid': float(deposit),
+                                'balance_due': float(balance_due),
                                 'status': 'Active',
                                 'daily_rate': current_daily_rate
                             }])
                             
                             st.session_state.rentals = pd.concat([st.session_state.rentals, new_rental], ignore_index=True)
-                            st.session_state.inventory.loc[st.session_state.inventory['item_id'] == item_details['item_id'], 'status'] = 'Rented'
-                            st.session_state.inventory.loc[st.session_state.inventory['item_id'] == item_details['item_id'], 'current_renter'] = customer_name
+                            
+                            # Update inventory - convert to proper types
+                            item_id_match = st.session_state.inventory['item_id'] == item_details['item_id']
+                            st.session_state.inventory.loc[item_id_match, 'status'] = 'Rented'
+                            st.session_state.inventory.loc[item_id_match, 'current_renter'] = str(customer_name)
                             
                             save_data()
                             
@@ -613,16 +614,14 @@ def main():
                 correct_total = days_calc * st.session_state.last_rental_data['daily_rate']
                 correct_balance = correct_total - st.session_state.last_rental_data['deposit_paid']
                 
-                st.write(f"DEBUG RECALC: days={days_calc}, daily_rate={st.session_state.last_rental_data['daily_rate']}, correct_total={correct_total}, stored_total={st.session_state.last_rental_data['total_cost']}")
-                
                 st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
                 st.info(f"💰 Total Rental Cost: {format_kes(correct_total)}")
                 st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
                 st.info(f"💰 Balance due on return: {format_kes(correct_balance)}")
                 
                 # Fix the stored data if it's wrong
-                if correct_total != st.session_state.last_rental_data['total_cost']:
-                    st.error(f"⚠️ Data mismatch detected! Fixing total from {st.session_state.last_rental_data['total_cost']} to {correct_total}")
+                if abs(correct_total - st.session_state.last_rental_data['total_cost']) > 0.01:
+                    st.warning(f"Note: Total cost corrected from {format_kes(st.session_state.last_rental_data['total_cost'])} to {format_kes(correct_total)}")
                     idx = st.session_state.rentals[st.session_state.rentals['rental_id'] == st.session_state.last_rental_data['rental_id']].index
                     if len(idx) > 0:
                         st.session_state.rentals.loc[idx[0], 'total_cost'] = correct_total
