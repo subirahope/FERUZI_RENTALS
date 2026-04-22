@@ -353,9 +353,21 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
     styles = getSampleStyleSheet()
     story = []
     
-    # Add logo
+    # ========================================================================
+    # ADD LOGO TO PDF - Using the same logic as the app
+    # ========================================================================
+    
     logo_added = False
-    logo_paths_to_try = ["feruzi_logo.png", "logo.png", "favicon.ico"]
+    
+    # Try to get logo from various sources
+    logo_paths_to_try = [
+        "feruzi_logo.png",
+        "logo.png", 
+        "favicon.ico",
+        os.path.join(APP_DIR, "feruzi_logo.png"),
+        os.path.join(APP_DIR, "logo.png"),
+        os.path.join(APP_DIR, "favicon.ico"),
+    ]
     
     for logo_path in logo_paths_to_try:
         if os.path.exists(logo_path):
@@ -366,8 +378,32 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
                 story.append(Spacer(1, 0.2*inch))
                 logo_added = True
                 break
-            except:
+            except Exception as e:
                 continue
+    
+    # If no local logo found, try to use base64 encoded logo from get_logo_image()
+    if not logo_added:
+        logo_base64_data = get_logo_image()
+        if logo_base64_data:
+            try:
+                # Decode base64 to bytes and save temporarily
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                    tmp_file.write(base64.b64decode(logo_base64_data))
+                    tmp_path = tmp_file.name
+                
+                img = Image(tmp_path, width=2*inch, height=2*inch)
+                img.hAlign = 'CENTER'
+                story.append(img)
+                story.append(Spacer(1, 0.2*inch))
+                logo_added = True
+                
+                # Clean up temp file
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+            except Exception as e:
+                pass
     
     # Company header
     title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
@@ -770,7 +806,7 @@ def main():
                     return_date = st.date_input("Return Date", datetime.date.today() + timedelta(days=3))
                 
                 st.markdown("---")
-                st.subheader("📦 Select Items to Rent")
+                st.subheader("Select Items to Rent")
                 
                 # Multi-item selection
                 selected_items = st.multiselect(
@@ -898,7 +934,7 @@ def main():
                 st.info(f"👤 Customer: {st.session_state.last_rental_data['customer_name']}")
                 st.info(f"📅 Rental Period: {days_calc} days")
                 
-                st.subheader("📦 Items Rented:")
+                st.subheader("Items Rented:")
                 for item in items:
                     st.write(f"  • {item['item_name']} - {format_kes(item['daily_rate'])}/day = {format_kes(item['cost'])}")
                 
