@@ -10,15 +10,16 @@ import uuid
 import os
 import sys
 import json
+import io
+import base64
+import requests
+import tempfile
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER
-import io
-import base64
-import requests
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -198,13 +199,8 @@ def create_receipt_pdf(rental_data):
     styles = getSampleStyleSheet()
     story = []
     
-    # ========================================================================
-    # ADD LOGO TO PDF - Using the same logic as the app
-    # ========================================================================
-    
+    # Add logo
     logo_added = False
-    
-    # Try to get logo from various sources
     logo_paths_to_try = [
         "feruzi_logo.png",
         "logo.png", 
@@ -225,13 +221,10 @@ def create_receipt_pdf(rental_data):
             except Exception as e:
                 continue
     
-    # If no local logo found, try to use base64 encoded logo from get_logo_image()
     if not logo_added:
         logo_base64_data = get_logo_image()
         if logo_base64_data:
             try:
-                # Decode base64 to bytes and save temporarily
-                import tempfile
                 with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
                     tmp_file.write(base64.b64decode(logo_base64_data))
                     tmp_path = tmp_file.name
@@ -241,8 +234,6 @@ def create_receipt_pdf(rental_data):
                 story.append(img)
                 story.append(Spacer(1, 0.2*inch))
                 logo_added = True
-                
-                # Clean up temp file
                 try:
                     os.unlink(tmp_path)
                 except:
@@ -502,8 +493,6 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
     buffer.seek(0)
     return buffer
 
-    
-
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
@@ -666,9 +655,7 @@ def main():
                 display_df['deposit_paid'] = display_df['deposit_paid'].apply(lambda x: format_kes(x))
             if 'balance_due' in display_df.columns:
                 display_df['balance_due'] = display_df['balance_due'].apply(lambda x: format_kes(x))
-            columns_to_show = ['rental_id', 'customer_name', 'item_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']
-            available_cols = [col for col in columns_to_show if col in display_df.columns]
-            st.dataframe(display_df[available_cols], use_container_width=True)
+            st.dataframe(display_df[['rental_id', 'customer_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']], use_container_width=True)
         
         # Inventory Status
         st.subheader("📦 Current Inventory Status")
@@ -751,7 +738,7 @@ def main():
                 csv = st.session_state.inventory.to_csv(index=False)
                 st.download_button("Download Inventory CSV", csv, "inventory_export.csv", "text/csv")
     
-       # ========================================================================
+    # ========================================================================
     # NEW RENTAL (Multi-Item Support)
     # ========================================================================
     
@@ -934,8 +921,6 @@ def main():
                     st.session_state.last_rental_data = None
                     st.rerun()
     
-   
-    
     # ========================================================================
     # ACTIVE RENTALS (Multi-Item Support)
     # ========================================================================
@@ -970,7 +955,6 @@ def main():
                     
                     # Show items
                     st.write("**Items Rented:**")
-                    import json
                     items = json.loads(rental['items_list'])
                     for item in items:
                         st.write(f"  • {item['item_name']} - {format_kes(item['daily_rate'])}/day")
@@ -1017,7 +1001,6 @@ def main():
                 
                 # Show items
                 st.write("**Items Rented:**")
-                import json
                 items = json.loads(rental_data['items_list'])
                 for item in items:
                     st.write(f"  • {item['item_name']}")
@@ -1110,7 +1093,6 @@ def main():
                     
                     # Show items
                     st.write("**Items Rented:**")
-                    import json
                     items = json.loads(rental['items_list'])
                     for item in items:
                         st.write(f"  • {item['item_name']} - {format_kes(item['daily_rate'])}/day")
@@ -1133,7 +1115,7 @@ def main():
             with col3:
                 unique_customers = st.session_state.rentals['customer_name'].nunique()
                 st.metric("Unique Customers", unique_customers)
-
+    
     # ========================================================================
     # CLEAR ALL DATA
     # ========================================================================
@@ -1185,19 +1167,6 @@ def main():
             st.metric("📦 Inventory Items", len(st.session_state.inventory))
         with col4:
             st.metric("📝 Rental Records", len(st.session_state.rentals))
-        
-        st.markdown("---")
-        st.subheader("Current Inventory")
-        if not st.session_state.inventory.empty:
-            st.dataframe(st.session_state.inventory[['item_id', 'item_name', 'status']], use_container_width=True)
-        else:
-            st.info("No inventory items")
-        
-        st.subheader("Current Rentals")
-        if not st.session_state.rentals.empty:
-            st.dataframe(st.session_state.rentals[['rental_id', 'customer_name', 'status']], use_container_width=True)
-        else:
-            st.info("No rental records")
 
 # ============================================================================
 # RUN THE APP
