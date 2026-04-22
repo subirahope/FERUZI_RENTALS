@@ -414,7 +414,7 @@ def main():
     if st.session_state.inventory.empty:
         load_sample_data()
     
-    # ========================================================================
+        # ========================================================================
     # SIDEBAR NAVIGATION
     # ========================================================================
     
@@ -433,7 +433,7 @@ def main():
     
     menu = st.sidebar.selectbox(
         "Choose an option",
-        ["Dashboard", "Inventory Management", "New Rental", "Active Rentals", "Return & Clear Balance", "Rental History"]
+        ["Dashboard", "Inventory Management", "New Rental", "Active Rentals", "Return & Clear Balance", "Rental History", "Clear All Data"]
     )
     
     # ========================================================================
@@ -893,6 +893,71 @@ def main():
             with col3:
                 unique_customers = st.session_state.rentals['customer_name'].nunique()
                 st.metric("Unique Customers", unique_customers)
+
+    # ========================================================================
+    # CLEAR ALL DATA
+    # ========================================================================
+    
+    elif menu == "Clear All Data":
+        st.markdown('<h1 class="main-header">Clear All Data</h1>', unsafe_allow_html=True)
+        
+        st.warning("⚠️ WARNING: This will delete ALL inventory and rental data!")
+        st.write("This action cannot be undone.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear All Data", type="secondary"):
+                # Clear inventory
+                st.session_state.inventory = pd.DataFrame(columns=[
+                    'item_id', 'item_name', 'category', 'brand', 'model', 
+                    'serial_number', 'daily_rate', 'status', 'current_renter'
+                ])
+                
+                # Clear rentals
+                st.session_state.rentals = pd.DataFrame(columns=[
+                    'rental_id', 'customer_name', 'customer_email', 'customer_phone',
+                    'item_id', 'item_name', 'rental_date', 'return_date', 
+                    'total_cost', 'deposit_paid', 'balance_due', 'status', 'daily_rate'
+                ])
+                
+                # Load fresh sample data
+                load_sample_data()
+                fix_dataframe_dtypes()
+                save_data()
+                
+                st.success("✅ All data has been cleared and sample data loaded!")
+                st.balloons()
+                st.rerun()
+        
+        with col2:
+            if st.button("📊 Load Sample Data Only"):
+                load_sample_data()
+                fix_dataframe_dtypes()
+                save_data()
+                st.success("✅ Sample data loaded!")
+                st.rerun()
+        
+        st.markdown("---")
+        st.subheader("Current Data Status")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            st.metric("📦 Inventory Items", len(st.session_state.inventory))
+        with col4:
+            st.metric("📝 Rental Records", len(st.session_state.rentals))
+        
+        st.markdown("---")
+        st.subheader("Current Inventory")
+        if not st.session_state.inventory.empty:
+            st.dataframe(st.session_state.inventory[['item_id', 'item_name', 'status']], use_container_width=True)
+        else:
+            st.info("No inventory items")
+        
+        st.subheader("Current Rentals")
+        if not st.session_state.rentals.empty:
+            st.dataframe(st.session_state.rentals[['rental_id', 'customer_name', 'item_name', 'status']], use_container_width=True)
+        else:
+            st.info("No rental records")
 
 # ============================================================================
 # RUN THE APP
