@@ -1,4 +1,4 @@
-# app.py - Updated with better logo handling for GitHub deployment
+# app.py - Complete Feruzi Rentals System
 import streamlit as st
 import pandas as pd
 import datetime
@@ -21,10 +21,8 @@ import requests
 def get_app_dir():
     """Get the application directory path"""
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
         return os.path.dirname(sys.executable)
     else:
-        # Running as script
         return os.path.dirname(os.path.abspath(__file__))
 
 APP_DIR = get_app_dir()
@@ -47,7 +45,7 @@ def get_logo_image():
             try:
                 with open(local_path, "rb") as f:
                     logo_data = f.read()
-                    if logo_data:  # Check if file has content
+                    if logo_data:
                         return base64.b64encode(logo_data).decode()
             except:
                 pass
@@ -65,14 +63,15 @@ def get_logo_image():
     
     # Method 3: Try to download from GitHub raw URL (for Streamlit Cloud)
     try:
-        # Replace with your actual GitHub username and repository
-        github_username = "subirahope"  # Replace with your GitHub username
-        repo_name = "feruzi_rentals"    # Replace with your repository name
+        # Your GitHub details
+        github_username = "subirahope"
+        repo_name = "FERUZI_RENTALS"
         
         github_raw_urls = [
             f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/feruzi_logo.png",
             f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/logo.png",
             f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/favicon.ico",
+            f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/feruzi_rentals/feruzi_logo.png",
         ]
         
         for url in github_raw_urls:
@@ -113,15 +112,15 @@ st.markdown("""
         text-align: center;
         padding: 1rem;
     }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #34495e;
-        margin-top: 1rem;
-    }
     .centered-logo {
         display: flex;
         justify-content: center;
         margin-bottom: 1rem;
+    }
+    .stMetric {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -137,7 +136,7 @@ if 'rentals' not in st.session_state:
     st.session_state.rentals = pd.DataFrame(columns=[
         'rental_id', 'customer_name', 'customer_email', 'customer_phone',
         'item_id', 'item_name', 'rental_date', 'return_date', 
-        'total_cost', 'deposit_paid', 'balance_due', 'status'
+        'total_cost', 'deposit_paid', 'balance_due', 'status', 'daily_rate'
     ])
 
 # Load sample data
@@ -174,28 +173,11 @@ def load_sample_data():
                 'model': 'Z6',
                 'serial_number': 'SN345678',
                 'daily_rate': 4500.0,
-                'status': 'Rented',
-                'current_renter': 'John Doe'
+                'status': 'Available',
+                'current_renter': ''
             }
         ]
         st.session_state.inventory = pd.DataFrame(sample_items)
-    
-    if st.session_state.rentals.empty:
-        sample_rental = {
-            'rental_id': 'RENT001',
-            'customer_name': 'John Doe',
-            'customer_email': 'john@example.com',
-            'customer_phone': '0712345678',
-            'item_id': 'CAM002',
-            'item_name': 'Nikon Z6',
-            'rental_date': datetime.date.today() - timedelta(days=2),
-            'return_date': datetime.date.today() + timedelta(days=3),
-            'total_cost': 22500.0,
-            'deposit_paid': 10000.0,
-            'balance_due': 12500.0,
-            'status': 'Active'
-        }
-        st.session_state.rentals = pd.DataFrame([sample_rental])
 
 def save_data():
     try:
@@ -210,12 +192,10 @@ def load_data():
             st.session_state.inventory = pd.read_csv('inventory.csv')
         if os.path.exists('rentals.csv'):
             st.session_state.rentals = pd.read_csv('rentals.csv')
-            # Convert date columns
             if 'rental_date' in st.session_state.rentals.columns:
                 st.session_state.rentals['rental_date'] = pd.to_datetime(st.session_state.rentals['rental_date']).dt.date
             if 'return_date' in st.session_state.rentals.columns:
                 st.session_state.rentals['return_date'] = pd.to_datetime(st.session_state.rentals['return_date']).dt.date
-            # Add balance_due if missing
             if 'balance_due' not in st.session_state.rentals.columns:
                 if 'total_cost' in st.session_state.rentals.columns and 'deposit_paid' in st.session_state.rentals.columns:
                     st.session_state.rentals['balance_due'] = st.session_state.rentals['total_cost'] - st.session_state.rentals['deposit_paid']
@@ -232,10 +212,8 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     styles = getSampleStyleSheet()
     story = []
     
-    # Try to add logo from multiple sources
+    # Try to add logo
     logo_added = False
-    
-    # Try local file first
     for possible_logo in ["feruzi_logo.png", "logo.png", "favicon.ico"]:
         if os.path.exists(possible_logo):
             try:
@@ -360,7 +338,6 @@ def display_centered_logo(width=200):
         st.markdown(centered_logo_html, unsafe_allow_html=True)
         return True
     else:
-        # Fallback to text logo
         st.markdown('<p style="text-align: center; font-size: 1.5rem;">📷 FERUZI RENTALS</p>', unsafe_allow_html=True)
         return False
 
@@ -379,6 +356,7 @@ def main():
             st.image(f"data:image/png;base64,{logo_base64_sidebar}", use_container_width=True)
     else:
         st.sidebar.markdown("### 📷 FERUZI RENTALS")
+        st.sidebar.markdown("*Film.Photography.Possibility.*")
     
     st.sidebar.markdown("---")
     st.sidebar.title("📋 Navigation")
@@ -388,7 +366,7 @@ def main():
         ["Dashboard", "Inventory Management", "New Rental", "Active Rentals", "Return & Clear Balance", "Rental History"]
     )
     
-    # Dashboard
+    # DASHBOARD
     if menu == "Dashboard":
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -399,6 +377,7 @@ def main():
         st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #7f8c8d;">FILM.PHOTOGRAPHY.POSSIBILITY.</p>', unsafe_allow_html=True)
         st.markdown("---")
         
+        # Metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             available_items = len(st.session_state.inventory[st.session_state.inventory['status'] == 'Available'])
@@ -419,38 +398,224 @@ def main():
         
         st.markdown("---")
         
+        # Recent Rentals
         st.subheader("📊 Recent Rentals")
         if not st.session_state.rentals.empty:
             recent = st.session_state.rentals.tail(5)
             display_df = recent.copy()
-            
-            if 'total_cost' in display_df.columns:
-                display_df['total_cost'] = display_df['total_cost'].apply(lambda x: format_kes(x))
             if 'deposit_paid' in display_df.columns:
                 display_df['deposit_paid'] = display_df['deposit_paid'].apply(lambda x: format_kes(x))
             if 'balance_due' in display_df.columns:
                 display_df['balance_due'] = display_df['balance_due'].apply(lambda x: format_kes(x))
-            
             columns_to_show = ['rental_id', 'customer_name', 'item_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']
             available_cols = [col for col in columns_to_show if col in display_df.columns]
             st.dataframe(display_df[available_cols], use_container_width=True)
         
+        # Inventory Status
         st.subheader("📦 Current Inventory Status")
         inventory_display = st.session_state.inventory[['item_id', 'item_name', 'category', 'status', 'current_renter']].copy()
         st.dataframe(inventory_display, use_container_width=True)
     
-    # New Rental (simplified for brevity - keep your existing code)
-    elif menu == "New Rental":
-        st.markdown('<h1 class="main-header">Create New Rental</h1>', unsafe_allow_html=True)
-        st.info("Rental creation form would go here - keeping your existing code")
-        # ... (your existing New Rental code)
+    # INVENTORY MANAGEMENT
+    elif menu == "Inventory Management":
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(width=150)
+        
+        st.markdown('<h1 class="main-header">Inventory Management</h1>', unsafe_allow_html=True)
+        
+        tab1, tab2, tab3 = st.tabs(["Add New Item", "Edit/Delete Items", "View All Items"])
+        
+        with tab1:
+            with st.form("add_item_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    item_id = st.text_input("Item ID*", placeholder="e.g., CAM001")
+                    item_name = st.text_input("Item Name*", placeholder="e.g., Sony A7III")
+                    category = st.selectbox("Category*", ["Camera Body", "Lens", "Lighting", "Tripod", "Audio", "Accessory"])
+                    brand = st.text_input("Brand", placeholder="e.g., Sony, Canon")
+                with col2:
+                    model = st.text_input("Model", placeholder="e.g., A7III")
+                    serial_number = st.text_input("Serial Number*")
+                    daily_rate = st.number_input("Daily Rate (KES)*", min_value=0.0, step=500.0, value=5000.0)
+                    status = st.selectbox("Status", ["Available", "Rented", "Maintenance"])
+                
+                if st.form_submit_button("Add Item"):
+                    if item_id and item_name and serial_number and daily_rate > 0:
+                        new_item = pd.DataFrame([{
+                            'item_id': item_id, 'item_name': item_name, 'category': category,
+                            'brand': brand, 'model': model, 'serial_number': serial_number,
+                            'daily_rate': daily_rate, 'status': status, 'current_renter': ''
+                        }])
+                        st.session_state.inventory = pd.concat([st.session_state.inventory, new_item], ignore_index=True)
+                        save_data()
+                        st.success(f"✅ {item_name} added successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Please fill in all required fields (*)")
+        
+        with tab2:
+            if not st.session_state.inventory.empty:
+                item_to_edit = st.selectbox("Select item to edit", st.session_state.inventory['item_name'])
+                if item_to_edit:
+                    item_data = st.session_state.inventory[st.session_state.inventory['item_name'] == item_to_edit].iloc[0]
+                    with st.form("edit_item_form"):
+                        new_item_name = st.text_input("Item Name", value=item_data['item_name'])
+                        new_rate = st.number_input("Daily Rate (KES)", value=float(item_data['daily_rate']), step=500.0)
+                        new_status = st.selectbox("Status", ["Available", "Rented", "Maintenance"])
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Update"):
+                                st.session_state.inventory.loc[st.session_state.inventory['item_name'] == item_to_edit, 'item_name'] = new_item_name
+                                st.session_state.inventory.loc[st.session_state.inventory['item_name'] == new_item_name, 'daily_rate'] = new_rate
+                                st.session_state.inventory.loc[st.session_state.inventory['item_name'] == new_item_name, 'status'] = new_status
+                                save_data()
+                                st.success("✅ Item updated!")
+                                st.rerun()
+                        with col2:
+                            if st.form_submit_button("Delete", type="secondary"):
+                                st.session_state.inventory = st.session_state.inventory[st.session_state.inventory['item_name'] != item_to_edit]
+                                save_data()
+                                st.warning("🗑️ Item deleted!")
+                                st.rerun()
+        
+        with tab3:
+            display_df = st.session_state.inventory.copy()
+            display_df['daily_rate'] = display_df['daily_rate'].apply(lambda x: format_kes(x))
+            st.dataframe(display_df, use_container_width=True)
+            if st.button("Export to CSV"):
+                csv = st.session_state.inventory.to_csv(index=False)
+                st.download_button("Download Inventory CSV", csv, "inventory_export.csv", "text/csv")
     
-    # Active Rentals
+    # NEW RENTAL
+    elif menu == "New Rental":
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(width=150)
+        
+        st.markdown('<h1 class="main-header">Create New Rental</h1>', unsafe_allow_html=True)
+        
+        available_items = st.session_state.inventory[st.session_state.inventory['status'] == 'Available']
+        
+        if available_items.empty:
+            st.warning("⚠️ No items available for rent.")
+        else:
+            if 'rental_created' not in st.session_state:
+                st.session_state.rental_created = False
+                st.session_state.last_rental_data = None
+            
+            with st.form("rental_form"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    customer_name = st.text_input("Customer Name*")
+                    customer_email = st.text_input("Email*")
+                    customer_phone = st.text_input("Phone Number*", placeholder="e.g., 0712345678")
+                with col2:
+                    selected_item = st.selectbox("Select Item to Rent*", available_items['item_name'].tolist())
+                    item_details = available_items[available_items['item_name'] == selected_item].iloc[0]
+                    daily_rate = item_details['daily_rate']
+                    st.info(f"Daily Rate: {format_kes(daily_rate)}")
+                
+                col3, col4, col5 = st.columns(3)
+                with col3:
+                    rental_date = st.date_input("Rental Date", datetime.date.today())
+                with col4:
+                    return_date = st.date_input("Return Date", datetime.date.today() + timedelta(days=3))
+                with col5:
+                    deposit = st.number_input("Deposit Amount (KES)*", min_value=0.0, value=5000.0, step=1000.0,
+                                             help="Amount customer pays today")
+                
+                if rental_date and return_date:
+                    days = (return_date - rental_date).days
+                    if days > 0:
+                        total_cost = days * daily_rate
+                        balance_due = total_cost - deposit
+                        st.success(f"💰 Total Rental Cost: {format_kes(total_cost)} for {days} days")
+                        st.info(f"💰 Deposit Paid Today: {format_kes(deposit)}")
+                        if balance_due > 0:
+                            st.warning(f"💰 Balance Due on Return: {format_kes(balance_due)}")
+                        elif balance_due < 0:
+                            st.error(f"⚠️ Deposit exceeds total cost! Please reduce deposit amount.")
+                        else:
+                            st.success(f"✅ Fully paid! No balance due.")
+                    else:
+                        st.error("Return date must be after rental date!")
+                
+                submitted = st.form_submit_button("Create Rental")
+            
+            if submitted:
+                if customer_name and customer_email and customer_phone and selected_item:
+                    days = (return_date - rental_date).days
+                    if days > 0:
+                        total_cost = days * daily_rate
+                        balance_due = total_cost - deposit
+                        
+                        if balance_due < 0:
+                            st.error("Deposit cannot exceed total rental cost!")
+                        else:
+                            rental_id = f"RENT{str(uuid.uuid4())[:8].upper()}"
+                            
+                            new_rental = pd.DataFrame([{
+                                'rental_id': rental_id,
+                                'customer_name': customer_name,
+                                'customer_email': customer_email,
+                                'customer_phone': customer_phone,
+                                'item_id': item_details['item_id'],
+                                'item_name': selected_item,
+                                'rental_date': rental_date,
+                                'return_date': return_date,
+                                'total_cost': total_cost,
+                                'deposit_paid': deposit,
+                                'balance_due': balance_due,
+                                'status': 'Active',
+                                'daily_rate': daily_rate
+                            }])
+                            
+                            st.session_state.rentals = pd.concat([st.session_state.rentals, new_rental], ignore_index=True)
+                            st.session_state.inventory.loc[st.session_state.inventory['item_id'] == item_details['item_id'], 'status'] = 'Rented'
+                            st.session_state.inventory.loc[st.session_state.inventory['item_id'] == item_details['item_id'], 'current_renter'] = customer_name
+                            
+                            save_data()
+                            
+                            st.session_state.rental_created = True
+                            st.session_state.last_rental_data = new_rental.iloc[0].to_dict()
+                            st.rerun()
+                    else:
+                        st.error("Please ensure return date is after rental date!")
+                else:
+                    st.error("Please fill in all customer information!")
+            
+            if st.session_state.rental_created and st.session_state.last_rental_data:
+                st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
+                st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
+                st.info(f"💰 Balance due on return: {format_kes(st.session_state.last_rental_data['balance_due'])}")
+                
+                pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data)
+                
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    if st.download_button("📄 Download Receipt", data=pdf_buffer,
+                                         file_name=f"receipt_{st.session_state.last_rental_data['rental_id']}.pdf",
+                                         mime="application/pdf", key="download_receipt"):
+                        st.balloons()
+                
+                if st.button("Create Another Rental", key="new_rental_btn"):
+                    st.session_state.rental_created = False
+                    st.session_state.last_rental_data = None
+                    st.rerun()
+    
+    # ACTIVE RENTALS
     elif menu == "Active Rentals":
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(width=150)
+        
         st.markdown('<h1 class="main-header">Active Rentals</h1>', unsafe_allow_html=True)
+        
         active = st.session_state.rentals[st.session_state.rentals['status'] == 'Active']
+        
         if active.empty:
-            st.info("No active rentals.")
+            st.info("No active rentals at the moment.")
         else:
             display_active = active.copy()
             if 'deposit_paid' in display_active.columns:
@@ -458,31 +623,143 @@ def main():
             if 'balance_due' in display_active.columns:
                 display_active['balance_due'] = display_active['balance_due'].apply(lambda x: format_kes(x))
             st.dataframe(display_active[['rental_id', 'customer_name', 'item_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due']], use_container_width=True)
+            
+            for _, rental in active.iterrows():
+                with st.expander(f"Rental #{rental['rental_id']} - {rental['customer_name']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Item:** {rental['item_name']}")
+                        st.write(f"**Rental Date:** {rental['rental_date']}")
+                        st.write(f"**Return Date:** {rental['return_date']}")
+                    with col2:
+                        st.write(f"**Total Cost:** {format_kes(rental['total_cost'])}")
+                        st.write(f"**Deposit Paid:** {format_kes(rental['deposit_paid'])}")
+                        st.write(f"**Balance Due:** {format_kes(rental['balance_due'])}")
+                        days_left = (rental['return_date'] - datetime.date.today()).days
+                        if days_left >= 0:
+                            st.info(f"⏰ {days_left} days left until return")
+                        else:
+                            st.warning(f"⚠️ Rental is {abs(days_left)} days overdue!")
     
-    # Return & Clear Balance
+    # RETURN & CLEAR BALANCE
     elif menu == "Return & Clear Balance":
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(width=150)
+        
         st.markdown('<h1 class="main-header">Return Item & Clear Balance</h1>', unsafe_allow_html=True)
-        st.info("Return form would go here - keeping your existing code")
-        # ... (your existing Return code)
+        
+        active_rentals = st.session_state.rentals[st.session_state.rentals['status'] == 'Active']
+        
+        if active_rentals.empty:
+            st.info("No active rentals to return.")
+        else:
+            rental_to_return = st.selectbox("Select rental to return", 
+                                           active_rentals.apply(lambda x: f"{x['rental_id']} - {x['customer_name']} - {x['item_name']}", axis=1))
+            
+            if rental_to_return:
+                rental_id = rental_to_return.split(" - ")[0]
+                rental_data = st.session_state.rentals[st.session_state.rentals['rental_id'] == rental_id].iloc[0]
+                
+                st.write("### Rental Summary")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Customer:** {rental_data['customer_name']}")
+                    st.write(f"**Item:** {rental_data['item_name']}")
+                    st.write(f"**Rental Date:** {rental_data['rental_date']}")
+                with col2:
+                    st.write(f"**Return Date:** {rental_data['return_date']}")
+                    st.write(f"**Total Cost:** {format_kes(rental_data['total_cost'])}")
+                    st.write(f"**Deposit Paid:** {format_kes(rental_data['deposit_paid'])}")
+                    st.write(f"**Balance Due:** {format_kes(rental_data['balance_due'])}")
+                
+                # Calculate late fees
+                today = datetime.date.today()
+                late_fee = 0
+                if today > rental_data['return_date']:
+                    days_late = (today - rental_data['return_date']).days
+                    late_fee = days_late * 500
+                    st.warning(f"⚠️ {days_late} days late. Late fee: {format_kes(late_fee)}")
+                
+                col3, col4 = st.columns(2)
+                with col3:
+                    damage_fee = st.number_input("Damage Fee (KES)", min_value=0.0, step=500.0, value=0.0)
+                with col4:
+                    balance_paid = st.number_input("Balance Payment Received (KES)", 
+                                                   min_value=0.0, 
+                                                   max_value=rental_data['balance_due'] + late_fee + damage_fee,
+                                                   value=rental_data['balance_due'] + late_fee + damage_fee,
+                                                   step=500.0)
+                
+                total_due = rental_data['balance_due'] + late_fee + damage_fee
+                st.info(f"💰 Total amount due: {format_kes(total_due)}")
+                
+                if balance_paid < total_due:
+                    st.warning(f"⚠️ Short payment of {format_kes(total_due - balance_paid)}")
+                elif balance_paid > total_due:
+                    st.success(f"💰 Overpayment of {format_kes(balance_paid - total_due)} (refund to customer)")
+                
+                if st.button("Process Return & Clear Balance"):
+                    st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'status'] = 'Completed'
+                    st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'balance_due'] = 0
+                    
+                    st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'status'] = 'Available'
+                    st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'current_renter'] = ''
+                    
+                    save_data()
+                    
+                    st.success("✅ Return processed successfully!")
+                    
+                    if balance_paid > total_due:
+                        st.info(f"💰 Refund due to customer: {format_kes(balance_paid - total_due)}")
+                    elif balance_paid < total_due:
+                        st.warning(f"⚠️ Outstanding balance: {format_kes(total_due - balance_paid)}")
+                    else:
+                        st.success("✅ Balance fully cleared!")
+                    
+                    st.balloons()
     
-    # Inventory Management
-    elif menu == "Inventory Management":
-        st.markdown('<h1 class="main-header">Inventory Management</h1>', unsafe_allow_html=True)
-        st.info("Inventory management would go here - keeping your existing code")
-        # ... (your existing Inventory code)
-    
-    # Rental History
+    # RENTAL HISTORY
     elif menu == "Rental History":
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            display_centered_logo(width=150)
+        
         st.markdown('<h1 class="main-header">Rental History</h1>', unsafe_allow_html=True)
-        if not st.session_state.rentals.empty:
-            display_history = st.session_state.rentals.copy()
-            if 'total_cost' in display_history.columns:
-                display_history['total_cost'] = display_history['total_cost'].apply(lambda x: format_kes(x))
-            if 'deposit_paid' in display_history.columns:
-                display_history['deposit_paid'] = display_history['deposit_paid'].apply(lambda x: format_kes(x))
-            if 'balance_due' in display_history.columns:
-                display_history['balance_due'] = display_history['balance_due'].apply(lambda x: format_kes(x))
-            st.dataframe(display_history, use_container_width=True)
+        
+        if st.session_state.rentals.empty:
+            st.info("No rental history available.")
+        else:
+            status_filter = st.selectbox("Filter by status", ["All", "Active", "Completed"])
+            
+            if status_filter == "All":
+                filtered = st.session_state.rentals
+            else:
+                filtered = st.session_state.rentals[st.session_state.rentals['status'] == status_filter]
+            
+            display_filtered = filtered.copy()
+            if 'total_cost' in display_filtered.columns:
+                display_filtered['total_cost'] = display_filtered['total_cost'].apply(lambda x: format_kes(x))
+            if 'deposit_paid' in display_filtered.columns:
+                display_filtered['deposit_paid'] = display_filtered['deposit_paid'].apply(lambda x: format_kes(x))
+            if 'balance_due' in display_filtered.columns:
+                display_filtered['balance_due'] = display_filtered['balance_due'].apply(lambda x: format_kes(x))
+            
+            st.dataframe(display_filtered[['rental_id', 'customer_name', 'item_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']], use_container_width=True)
+            
+            st.markdown("---")
+            st.subheader("📈 Rental Statistics")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                total_rentals = len(st.session_state.rentals)
+                st.metric("Total Rentals", total_rentals)
+            with col2:
+                total_revenue = st.session_state.rentals['total_cost'].sum()
+                st.metric("Total Revenue", format_kes(total_revenue))
+            with col3:
+                unique_customers = st.session_state.rentals['customer_name'].nunique()
+                st.metric("Unique Customers", unique_customers)
 
 if __name__ == "__main__":
     main()
