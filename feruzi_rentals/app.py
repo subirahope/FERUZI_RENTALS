@@ -595,23 +595,44 @@ def main():
                     st.error("Please fill in all customer information!")
             
             if st.session_state.rental_created and st.session_state.last_rental_data:
-                st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
-                st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
-                st.info(f"💰 Balance due on return: {format_kes(st.session_state.last_rental_data['balance_due'])}")
-                
-                pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data)
-                
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    if st.download_button("📄 Download Receipt", data=pdf_buffer,
-                                         file_name=f"receipt_{st.session_state.last_rental_data['rental_id']}.pdf",
-                                         mime="application/pdf", key="download_receipt"):
-                        st.balloons()
-                
-                if st.button("Create Another Rental", key="new_rental_btn"):
-                    st.session_state.rental_created = False
-                    st.session_state.last_rental_data = None
-                    st.rerun()
+    # Debug: Show all values to verify
+    st.write("### Debug Information")
+    st.write(f"Total Cost: {st.session_state.last_rental_data['total_cost']}")
+    st.write(f"Deposit Paid: {st.session_state.last_rental_data['deposit_paid']}")
+    st.write(f"Balance Due (stored): {st.session_state.last_rental_data['balance_due']}")
+    st.write(f"Calculated Balance: {st.session_state.last_rental_data['total_cost'] - st.session_state.last_rental_data['deposit_paid']}")
+    
+    # Verify calculation
+    correct_balance = st.session_state.last_rental_data['total_cost'] - st.session_state.last_rental_data['deposit_paid']
+    
+    if st.session_state.last_rental_data['balance_due'] != correct_balance:
+        st.error(f"⚠️ Data inconsistency detected! Fixing balance from {st.session_state.last_rental_data['balance_due']} to {correct_balance}")
+        # Fix the balance
+        st.session_state.last_rental_data['balance_due'] = correct_balance
+        # Also update in the dataframe
+        idx = st.session_state.rentals[st.session_state.rentals['rental_id'] == st.session_state.last_rental_data['rental_id']].index
+        if len(idx) > 0:
+            st.session_state.rentals.loc[idx[0], 'balance_due'] = correct_balance
+            save_data()
+    
+    st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
+    st.info(f"💰 Total Rental Cost: {format_kes(st.session_state.last_rental_data['total_cost'])}")
+    st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
+    st.info(f"💰 Balance due on return: {format_kes(st.session_state.last_rental_data['balance_due'])}")
+    
+    pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.download_button("📄 Download Receipt", data=pdf_buffer,
+                             file_name=f"receipt_{st.session_state.last_rental_data['rental_id']}.pdf",
+                             mime="application/pdf", key="download_receipt"):
+            st.balloons()
+    
+    if st.button("Create Another Rental", key="new_rental_btn"):
+        st.session_state.rental_created = False
+        st.session_state.last_rental_data = None
+        st.rerun()
     
     # ACTIVE RENTALS
     elif menu == "Active Rentals":
