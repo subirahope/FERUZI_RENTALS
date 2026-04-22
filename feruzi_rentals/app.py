@@ -1,4 +1,7 @@
-# app.py - Complete Feruzi Rentals System
+# ============================================================================
+# FERUZI RENTALS - COMPLETE INVENTORY MANAGEMENT SYSTEM
+# ============================================================================
+
 import streamlit as st
 import pandas as pd
 import datetime
@@ -11,12 +14,15 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 import io
 import base64
 import requests
 
-# Get the directory where the app is running
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
 def get_app_dir():
     """Get the application directory path"""
     if getattr(sys, 'frozen', False):
@@ -26,18 +32,15 @@ def get_app_dir():
 
 APP_DIR = get_app_dir()
 
-# Function to format currency in KES
 def format_kes(amount):
+    """Format currency in Kenyan Shillings"""
     return f"KES {amount:,.2f}"
 
-# Enhanced function to get logo from multiple sources
 def get_logo_image():
-    """Try to load logo from multiple sources including GitHub raw"""
+    """Try to load logo from multiple sources"""
+    logo_names = ["feruzi_logo.png", "logo.png", "favicon.ico", "feruzi.png"]
     
-    # List of possible logo file names
-    logo_names = ["feruzi_logo.png", "logo.png", "favicon.ico", "feruzi.png", "feruzi_logo.jpg"]
-    
-    # Method 1: Check local files in app directory
+    # Check local files
     for logo_name in logo_names:
         local_path = os.path.join(APP_DIR, logo_name)
         if os.path.exists(local_path):
@@ -48,9 +51,7 @@ def get_logo_image():
                         return base64.b64encode(logo_data).decode()
             except:
                 pass
-    
-    # Method 2: Check current working directory
-    for logo_name in logo_names:
+        
         if os.path.exists(logo_name):
             try:
                 with open(logo_name, "rb") as f:
@@ -60,79 +61,92 @@ def get_logo_image():
             except:
                 pass
     
-    # Method 3: Try to download from GitHub raw URL (for Streamlit Cloud)
+    # Try GitHub raw URL
     try:
         github_username = "subirahope"
         repo_name = "FERUZI_RENTALS"
-        
-        github_raw_urls = [
-            f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/feruzi_logo.png",
-            f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/logo.png",
-            f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/favicon.ico",
-        ]
-        
-        for url in github_raw_urls:
-            try:
-                response = requests.get(url, timeout=5)
-                if response.status_code == 200 and response.content:
-                    return base64.b64encode(response.content).decode()
-            except:
-                continue
+        url = f"https://raw.githubusercontent.com/{github_username}/{repo_name}/main/feruzi_logo.png"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200 and response.content:
+            return base64.b64encode(response.content).decode()
     except:
         pass
     
     return None
 
-# Page configuration with favicon
-logo_base64 = get_logo_image()
-if logo_base64:
-    st.set_page_config(
-        page_title="Feruzi Rentals - Camera Inventory System",
-        page_icon=f"data:image/png;base64,{logo_base64}",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-else:
-    st.set_page_config(
-        page_title="Feruzi Rentals - Camera Inventory System",
-        page_icon="📷",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+def display_centered_logo(width=200):
+    """Display centered logo in the app"""
+    logo_base64_local = get_logo_image()
+    if logo_base64_local:
+        centered_logo_html = f"""
+        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+            <img src="data:image/png;base64,{logo_base64_local}" width="{width}" style="object-fit: contain;">
+        </div>
+        """
+        st.markdown(centered_logo_html, unsafe_allow_html=True)
+        return True
+    else:
+        st.markdown('<p style="text-align: center; font-size: 1.5rem;">📷 FERUZI RENTALS</p>', unsafe_allow_html=True)
+        return False
 
-# Custom CSS
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #2c3e50;
-        text-align: center;
-        padding: 1rem;
-    }
-    .centered-logo {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 1rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+# ============================================================================
+# DATA MANAGEMENT FUNCTIONS
+# ============================================================================
 
-# Initialize session state
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = pd.DataFrame(columns=[
-        'item_id', 'item_name', 'category', 'brand', 'model', 
-        'serial_number', 'daily_rate', 'status', 'current_renter'
-    ])
+def fix_dataframe_dtypes():
+    """Ensure all columns have correct data types"""
+    # Fix inventory dataframe
+    if 'current_renter' in st.session_state.inventory.columns:
+        st.session_state.inventory['current_renter'] = st.session_state.inventory['current_renter'].astype(str)
+        st.session_state.inventory['current_renter'] = st.session_state.inventory['current_renter'].replace('nan', '')
+    
+    if 'item_id' in st.session_state.inventory.columns:
+        st.session_state.inventory['item_id'] = st.session_state.inventory['item_id'].astype(str)
+    
+    if 'status' in st.session_state.inventory.columns:
+        st.session_state.inventory['status'] = st.session_state.inventory['status'].astype(str)
+    
+    # Fix rentals dataframe
+    if 'rental_id' in st.session_state.rentals.columns:
+        st.session_state.rentals['rental_id'] = st.session_state.rentals['rental_id'].astype(str)
+    if 'customer_name' in st.session_state.rentals.columns:
+        st.session_state.rentals['customer_name'] = st.session_state.rentals['customer_name'].astype(str)
+    if 'status' in st.session_state.rentals.columns:
+        st.session_state.rentals['status'] = st.session_state.rentals['status'].astype(str)
 
-if 'rentals' not in st.session_state:
-    st.session_state.rentals = pd.DataFrame(columns=[
-        'rental_id', 'customer_name', 'customer_email', 'customer_phone',
-        'item_id', 'item_name', 'rental_date', 'return_date', 
-        'total_cost', 'deposit_paid', 'balance_due', 'status', 'daily_rate'
-    ])
+def save_data():
+    """Save data to CSV files"""
+    try:
+        st.session_state.inventory.to_csv('inventory.csv', index=False)
+        st.session_state.rentals.to_csv('rentals.csv', index=False)
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
 
-# Load sample data
+def load_data():
+    """Load data from CSV files"""
+    try:
+        if os.path.exists('inventory.csv'):
+            st.session_state.inventory = pd.read_csv('inventory.csv')
+        if os.path.exists('rentals.csv'):
+            st.session_state.rentals = pd.read_csv('rentals.csv')
+            if 'rental_date' in st.session_state.rentals.columns:
+                st.session_state.rentals['rental_date'] = pd.to_datetime(st.session_state.rentals['rental_date']).dt.date
+            if 'return_date' in st.session_state.rentals.columns:
+                st.session_state.rentals['return_date'] = pd.to_datetime(st.session_state.rentals['return_date']).dt.date
+            if 'balance_due' not in st.session_state.rentals.columns:
+                if 'total_cost' in st.session_state.rentals.columns and 'deposit_paid' in st.session_state.rentals.columns:
+                    st.session_state.rentals['balance_due'] = st.session_state.rentals['total_cost'] - st.session_state.rentals['deposit_paid']
+                else:
+                    st.session_state.rentals['balance_due'] = 0
+        
+        # Fix data types after loading
+        fix_dataframe_dtypes()
+        
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+
 def load_sample_data():
+    """Load sample data if no data exists"""
     if st.session_state.inventory.empty:
         sample_items = [
             {
@@ -171,40 +185,19 @@ def load_sample_data():
         ]
         st.session_state.inventory = pd.DataFrame(sample_items)
 
-def save_data():
-    try:
-        st.session_state.inventory.to_csv('inventory.csv', index=False)
-        st.session_state.rentals.to_csv('rentals.csv', index=False)
-    except Exception as e:
-        st.error(f"Error saving data: {e}")
+# ============================================================================
+# PDF RECEIPT GENERATION
+# ============================================================================
 
-def load_data():
-    try:
-        if os.path.exists('inventory.csv'):
-            st.session_state.inventory = pd.read_csv('inventory.csv')
-        if os.path.exists('rentals.csv'):
-            st.session_state.rentals = pd.read_csv('rentals.csv')
-            if 'rental_date' in st.session_state.rentals.columns:
-                st.session_state.rentals['rental_date'] = pd.to_datetime(st.session_state.rentals['rental_date']).dt.date
-            if 'return_date' in st.session_state.rentals.columns:
-                st.session_state.rentals['return_date'] = pd.to_datetime(st.session_state.rentals['return_date']).dt.date
-            if 'balance_due' not in st.session_state.rentals.columns:
-                if 'total_cost' in st.session_state.rentals.columns and 'deposit_paid' in st.session_state.rentals.columns:
-                    st.session_state.rentals['balance_due'] = st.session_state.rentals['total_cost'] - st.session_state.rentals['deposit_paid']
-                else:
-                    st.session_state.rentals['balance_due'] = 0
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-
-# Function to create receipt PDF
-def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
+def create_receipt_pdf(rental_data):
+    """Generate PDF receipt for rental"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
     
     styles = getSampleStyleSheet()
     story = []
     
-    # Try to add logo
+    # Add logo
     for possible_logo in ["feruzi_logo.png", "logo.png", "favicon.ico"]:
         if os.path.exists(possible_logo):
             try:
@@ -316,28 +309,75 @@ def create_receipt_pdf(rental_data, logo_path="feruzi_logo.png"):
     buffer.seek(0)
     return buffer
 
-# Function to display centered logo
-def display_centered_logo(width=200):
-    logo_base64_local = get_logo_image()
-    if logo_base64_local:
-        centered_logo_html = f"""
-        <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
-            <img src="data:image/png;base64,{logo_base64_local}" width="{width}" style="object-fit: contain;">
-        </div>
-        """
-        st.markdown(centered_logo_html, unsafe_allow_html=True)
-        return True
-    else:
-        st.markdown('<p style="text-align: center; font-size: 1.5rem;">📷 FERUZI RENTALS</p>', unsafe_allow_html=True)
-        return False
+# ============================================================================
+# PAGE CONFIGURATION
+# ============================================================================
 
-# Main app
+# Page config with favicon
+logo_base64 = get_logo_image()
+if logo_base64:
+    st.set_page_config(
+        page_title="Feruzi Rentals - Camera Inventory System",
+        page_icon=f"data:image/png;base64,{logo_base64}",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+else:
+    st.set_page_config(
+        page_title="Feruzi Rentals - Camera Inventory System",
+        page_icon="📷",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+
+# Custom CSS
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #2c3e50;
+        text-align: center;
+        padding: 1rem;
+    }
+    .centered-logo {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================================
+# INITIALIZE SESSION STATE
+# ============================================================================
+
+if 'inventory' not in st.session_state:
+    st.session_state.inventory = pd.DataFrame(columns=[
+        'item_id', 'item_name', 'category', 'brand', 'model', 
+        'serial_number', 'daily_rate', 'status', 'current_renter'
+    ])
+
+if 'rentals' not in st.session_state:
+    st.session_state.rentals = pd.DataFrame(columns=[
+        'rental_id', 'customer_name', 'customer_email', 'customer_phone',
+        'item_id', 'item_name', 'rental_date', 'return_date', 
+        'total_cost', 'deposit_paid', 'balance_due', 'status', 'daily_rate'
+    ])
+
+# ============================================================================
+# MAIN APP
+# ============================================================================
+
 def main():
+    # Load data
     load_data()
     if st.session_state.inventory.empty:
         load_sample_data()
     
-    # Sidebar
+    # ========================================================================
+    # SIDEBAR NAVIGATION
+    # ========================================================================
+    
     st.sidebar.markdown("---")
     logo_base64_sidebar = get_logo_image()
     if logo_base64_sidebar:
@@ -356,7 +396,10 @@ def main():
         ["Dashboard", "Inventory Management", "New Rental", "Active Rentals", "Return & Clear Balance", "Rental History"]
     )
     
+    # ========================================================================
     # DASHBOARD
+    # ========================================================================
+    
     if menu == "Dashboard":
         st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -434,7 +477,10 @@ def main():
         inventory_display = st.session_state.inventory[['item_id', 'item_name', 'category', 'status', 'current_renter']].copy()
         st.dataframe(inventory_display, use_container_width=True)
     
+    # ========================================================================
     # INVENTORY MANAGEMENT
+    # ========================================================================
+    
     elif menu == "Inventory Management":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -466,6 +512,7 @@ def main():
                             'daily_rate': daily_rate, 'status': status, 'current_renter': ''
                         }])
                         st.session_state.inventory = pd.concat([st.session_state.inventory, new_item], ignore_index=True)
+                        fix_dataframe_dtypes()
                         save_data()
                         st.success(f"✅ {item_name} added successfully!")
                         st.rerun()
@@ -487,6 +534,7 @@ def main():
                                 st.session_state.inventory.loc[st.session_state.inventory['item_name'] == item_to_edit, 'item_name'] = new_item_name
                                 st.session_state.inventory.loc[st.session_state.inventory['item_name'] == new_item_name, 'daily_rate'] = new_rate
                                 st.session_state.inventory.loc[st.session_state.inventory['item_name'] == new_item_name, 'status'] = new_status
+                                fix_dataframe_dtypes()
                                 save_data()
                                 st.success("✅ Item updated!")
                                 st.rerun()
@@ -505,7 +553,10 @@ def main():
                 csv = st.session_state.inventory.to_csv(index=False)
                 st.download_button("Download Inventory CSV", csv, "inventory_export.csv", "text/csv")
     
-           # NEW RENTAL
+    # ========================================================================
+    # NEW RENTAL
+    # ========================================================================
+    
     elif menu == "New Rental":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -565,7 +616,6 @@ def main():
                 if customer_name and customer_email and customer_phone and selected_item:
                     days = (return_date - rental_date).days
                     if days > 0:
-                        # Use the daily_rate from the selected item
                         current_daily_rate = float(item_details['daily_rate'])
                         total_cost = days * current_daily_rate
                         balance_due = total_cost - deposit
@@ -577,11 +627,11 @@ def main():
                             
                             new_rental = pd.DataFrame([{
                                 'rental_id': rental_id,
-                                'customer_name': customer_name,
-                                'customer_email': customer_email,
-                                'customer_phone': customer_phone,
+                                'customer_name': str(customer_name),
+                                'customer_email': str(customer_email),
+                                'customer_phone': str(customer_phone),
                                 'item_id': str(item_details['item_id']),
-                                'item_name': selected_item,
+                                'item_name': str(selected_item),
                                 'rental_date': rental_date,
                                 'return_date': return_date,
                                 'total_cost': float(total_cost),
@@ -593,11 +643,13 @@ def main():
                             
                             st.session_state.rentals = pd.concat([st.session_state.rentals, new_rental], ignore_index=True)
                             
-                            # Update inventory - convert to proper types
-                            item_id_match = st.session_state.inventory['item_id'] == item_details['item_id']
-                            st.session_state.inventory.loc[item_id_match, 'status'] = 'Rented'
-                            st.session_state.inventory.loc[item_id_match, 'current_renter'] = str(customer_name)
+                            # Update inventory
+                            item_index = st.session_state.inventory[st.session_state.inventory['item_id'] == str(item_details['item_id'])].index
+                            if len(item_index) > 0:
+                                st.session_state.inventory.at[item_index[0], 'status'] = 'Rented'
+                                st.session_state.inventory.at[item_index[0], 'current_renter'] = str(customer_name)
                             
+                            fix_dataframe_dtypes()
                             save_data()
                             
                             st.session_state.rental_created = True
@@ -609,7 +661,6 @@ def main():
                     st.error("Please fill in all customer information!")
             
             if st.session_state.rental_created and st.session_state.last_rental_data:
-                # Recalculate to ensure accuracy
                 days_calc = (st.session_state.last_rental_data['return_date'] - st.session_state.last_rental_data['rental_date']).days
                 correct_total = days_calc * st.session_state.last_rental_data['daily_rate']
                 correct_balance = correct_total - st.session_state.last_rental_data['deposit_paid']
@@ -618,17 +669,6 @@ def main():
                 st.info(f"💰 Total Rental Cost: {format_kes(correct_total)}")
                 st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
                 st.info(f"💰 Balance due on return: {format_kes(correct_balance)}")
-                
-                # Fix the stored data if it's wrong
-                if abs(correct_total - st.session_state.last_rental_data['total_cost']) > 0.01:
-                    st.warning(f"Note: Total cost corrected from {format_kes(st.session_state.last_rental_data['total_cost'])} to {format_kes(correct_total)}")
-                    idx = st.session_state.rentals[st.session_state.rentals['rental_id'] == st.session_state.last_rental_data['rental_id']].index
-                    if len(idx) > 0:
-                        st.session_state.rentals.loc[idx[0], 'total_cost'] = correct_total
-                        st.session_state.rentals.loc[idx[0], 'balance_due'] = correct_balance
-                        save_data()
-                        st.session_state.last_rental_data['total_cost'] = correct_total
-                        st.session_state.last_rental_data['balance_due'] = correct_balance
                 
                 pdf_buffer = create_receipt_pdf(st.session_state.last_rental_data)
                 
@@ -644,7 +684,10 @@ def main():
                     st.session_state.last_rental_data = None
                     st.rerun()
     
+    # ========================================================================
     # ACTIVE RENTALS
+    # ========================================================================
+    
     elif menu == "Active Rentals":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -681,7 +724,10 @@ def main():
                         else:
                             st.warning(f"⚠️ Rental is {abs(days_left)} days overdue!")
     
+    # ========================================================================
     # RETURN & CLEAR BALANCE
+    # ========================================================================
+    
     elif menu == "Return & Clear Balance":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -743,9 +789,13 @@ def main():
                     st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'status'] = 'Completed'
                     st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'balance_due'] = 0
                     
-                    st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'status'] = 'Available'
-                    st.session_state.inventory.loc[st.session_state.inventory['item_id'] == rental_data['item_id'], 'current_renter'] = ''
+                    # Update inventory
+                    item_index = st.session_state.inventory[st.session_state.inventory['item_id'] == str(rental_data['item_id'])].index
+                    if len(item_index) > 0:
+                        st.session_state.inventory.at[item_index[0], 'status'] = 'Available'
+                        st.session_state.inventory.at[item_index[0], 'current_renter'] = ''
                     
+                    fix_dataframe_dtypes()
                     save_data()
                     
                     st.success("✅ Return processed successfully!")
@@ -759,7 +809,10 @@ def main():
                     
                     st.balloons()
     
+    # ========================================================================
     # RENTAL HISTORY
+    # ========================================================================
+    
     elif menu == "Rental History":
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -800,6 +853,10 @@ def main():
             with col3:
                 unique_customers = st.session_state.rentals['customer_name'].nunique()
                 st.metric("Unique Customers", unique_customers)
+
+# ============================================================================
+# RUN THE APP
+# ============================================================================
 
 if __name__ == "__main__":
     main()
