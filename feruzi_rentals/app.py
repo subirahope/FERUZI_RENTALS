@@ -270,8 +270,8 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
     c.setFont("Helvetica", 8.5)
     c.setFillColor(colors.HexColor("#C0EEEE"))
     c.drawString(tx, H - 23 * mm, "Film. Photography. Possibility.")
-    c.drawString(tx, H - 30 * mm, "Nairobi, Kenya   |   info@feruzirentals.co.ke")
-    c.drawString(tx, H - 36 * mm, "+254 700 000 000   |   www.feruzirentals.co.ke")
+    c.drawString(tx, H - 30 * mm, "Nairobi, Kenya   |   ianferuzi@gmail.com")
+    c.drawString(tx, H - 36 * mm, "+254 741 373743   |  @feruzi_rentals")
 
     # RENTAL RECEIPT badge (top-right of header)
     badge_w, badge_h = 50 * mm, 16 * mm
@@ -467,7 +467,7 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
 
     terms = [
         "• Equipment must be returned by the agreed return date.",
-        "• Late returns incur a 50% daily surcharge on the full rate.",
+        "• Late returns incur a Ksh. 500 daily surcharge.",
         "• Customer is responsible for any damage or loss of equipment.",
         "• Deposit is non-refundable and secures the rental.",
         "• Balance must be paid in full upon return of equipment.",
@@ -498,7 +498,7 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
     c.rect(0, 10 * mm, W, 1.5, fill=1, stroke=0)
     c.setFont("Helvetica", 7)
     c.setFillColor(MID_TEXT)
-    footer = "Thank you for choosing Feruzi Rentals  •  Film. Photography. Possibility.  •  www.feruzirentals.co.ke"
+    footer = "• Thank you for choosing Feruzi Rentals  •  Film. Photography. Possibility.  •"
     fw = c.stringWidth(footer, "Helvetica", 7)
     c.drawString((W - fw) / 2, 5.5 * mm, footer)
 
