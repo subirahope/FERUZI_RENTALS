@@ -20,6 +20,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -74,6 +76,16 @@ def get_logo_image():
     except:
         pass
     
+    return None
+
+def get_logo_path():
+    """Return a local file path for the logo (needed by reportlab canvas)"""
+    logo_names = ["feruzi_logo.png", "logo.png", "feruzi.png"]
+    for logo_name in logo_names:
+        for base in [APP_DIR, "."]:
+            p = os.path.join(base, logo_name)
+            if os.path.exists(p):
+                return p
     return None
 
 def display_centered_logo(width=200):
@@ -155,259 +167,342 @@ def load_sample_data():
         st.session_state.inventory = pd.DataFrame(sample_items)
 
 # ============================================================================
-# PROFESSIONAL PDF RECEIPT GENERATION
+# PROFESSIONAL PDF RECEIPT GENERATION  (canvas-based, matches brand design)
 # ============================================================================
 
 def create_multi_item_receipt_pdf(rental_data, items_list):
-    """Generate professional redesigned PDF receipt for multi-item rental"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, 
-                           rightMargin=0.75*inch, leftMargin=0.75*inch, 
-                           topMargin=0.75*inch, bottomMargin=0.75*inch)
-    
-    styles = getSampleStyleSheet()
-    story = []
-    
-    # Custom colors
-    primary_color = colors.HexColor('#1a1a2e')
-    secondary_color = colors.HexColor('#e94560')
-    accent_color = colors.HexColor('#0f3460')
-    light_gray = colors.HexColor('#f8f9fa')
-    border_gray = colors.HexColor('#dee2e6')
-    
-    # ========================================================================
-    # HEADER SECTION
-    # ========================================================================
-    
-    # Logo
-    logo_added = False
-    logo_paths_to_try = ["feruzi_logo.png", "logo.png", "favicon.ico", 
-                         os.path.join(APP_DIR, "feruzi_logo.png"),
-                         os.path.join(APP_DIR, "logo.png")]
-    
-    for logo_path in logo_paths_to_try:
-        if os.path.exists(logo_path):
-            try:
-                img = Image(logo_path, width=1.2*inch, height=1.2*inch)
-                img.hAlign = 'CENTER'
-                story.append(img)
-                story.append(Spacer(1, 0.15*inch))
-                logo_added = True
-                break
-            except:
-                continue
-    
-    # Company Name
-    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22,
-                                 textColor=primary_color, alignment=TA_CENTER, spaceAfter=5)
-    story.append(Paragraph("FERUZI RENTALS", title_style))
-    
-    tagline_style = ParagraphStyle('Tagline', parent=styles['Normal'], fontSize=10,
-                                   textColor=colors.HexColor('#666666'), alignment=TA_CENTER, spaceAfter=0.25*inch)
-    story.append(Paragraph("Film. Photography. Possibility.", tagline_style))
-    
-    # Divider
-    divider_style = ParagraphStyle('Divider', parent=styles['Normal'], fontSize=8,
-                                   textColor=border_gray, alignment=TA_CENTER, spaceAfter=0.2*inch)
-    story.append(Paragraph("━" * 60, divider_style))
-    
-    # Receipt Title
-    receipt_title_style = ParagraphStyle('ReceiptTitle', parent=styles['Heading2'], fontSize=16,
-                                         textColor=secondary_color, alignment=TA_CENTER, spaceAfter=5)
-    story.append(Paragraph("RENTAL RECEIPT", receipt_title_style))
-    
-    receipt_id_style = ParagraphStyle('ReceiptID', parent=styles['Normal'], fontSize=10,
-                                      textColor=colors.HexColor('#888888'), alignment=TA_CENTER, spaceAfter=0.3*inch)
-    story.append(Paragraph(f"ID: {rental_data['rental_id']}", receipt_id_style))
-    
-    # ========================================================================
-    # CUSTOMER INFORMATION SECTION
-    # ========================================================================
-    
-    # Section Header
-    section_header_style = ParagraphStyle('SectionHeader', parent=styles['Heading3'], fontSize=12,
-                                          textColor=primary_color, spaceAfter=0.1*inch, spaceBefore=0.2*inch)
-    story.append(Paragraph("CUSTOMER INFORMATION", section_header_style))
-    
-    customer_data = [
-        ['Customer Name:', rental_data['customer_name']],
-        ['Email:', rental_data['customer_email']],
-        ['Phone:', rental_data['customer_phone']],
-        ['Date Issued:', datetime.date.today().strftime('%Y-%m-%d')]
-    ]
-    
-    customer_table = Table(customer_data, colWidths=[1.5*inch, 3.5*inch])
-    customer_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-    ]))
-    story.append(customer_table)
-    story.append(Spacer(1, 0.2*inch))
-    
-    # ========================================================================
-    # RENTAL PERIOD SECTION
-    # ========================================================================
-    
-    story.append(Paragraph("RENTAL PERIOD", section_header_style))
-    
-    days = (rental_data['return_date'] - rental_data['rental_date']).days
-    period_data = [
-        ['Check-out Date:', rental_data['rental_date'].strftime('%Y-%m-%d')],
-        ['Return Date:', rental_data['return_date'].strftime('%Y-%m-%d')],
-        ['Duration:', f"{days} day(s)"]
-    ]
-    
-    period_table = Table(period_data, colWidths=[1.5*inch, 3.5*inch])
-    period_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-    ]))
-    story.append(period_table)
-    story.append(Spacer(1, 0.2*inch))
-    
-    # ========================================================================
-    # ITEMS RENTED TABLE
-    # ========================================================================
-    
-    story.append(Paragraph("ITEMS RENTED", section_header_style))
-    
-    # Table header
-    item_table_data = [['Item', 'Daily Rate', 'Total']]
-    
-    for item in items_list:
-        item_table_data.append([
-            item['item_name'],
-            f"KES {item['daily_rate']:,.2f}",
-            f"KES {item['cost']:,.2f}"
-        ])
-    
-    col_widths = [3.5*inch, 1.2*inch, 1.5*inch]
-    item_table = Table(item_table_data, colWidths=col_widths, repeatRows=1)
-    
-    # Style the table
-    table_style = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (2, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, border_gray),
-        ('BACKGROUND', (0, 0), (-1, 0), primary_color),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('TOPPADDING', (0, 0), (-1, 0), 8),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-        ('TOPPADDING', (0, 1), (-1, -1), 6),
-    ]
-    
-    # Add alternating row colors
-    for i in range(1, len(item_table_data)):
-        if i % 2 == 1:
-            table_style.append(('BACKGROUND', (0, i), (-1, i), light_gray))
-    
-    item_table.setStyle(TableStyle(table_style))
-    story.append(item_table)
-    story.append(Spacer(1, 0.25*inch))
-    
-    # ========================================================================
-    # PAYMENT SUMMARY
-    # ========================================================================
-    
-    story.append(Paragraph("PAYMENT SUMMARY", section_header_style))
-    
-    total_cost = rental_data['total_cost']
-    deposit = rental_data['deposit_paid']
-    balance = rental_data['balance_due']
-    
-    # Create a boxed summary
-    summary_data = [
-        ['Total Rental Cost:', f"KES {total_cost:,.2f}"],
-        ['Deposit Paid (Today):', f"KES {deposit:,.2f}"],
-        ['', ''],
-        ['Balance Due on Return:', f"KES {balance:,.2f}"]
-    ]
-    
-    summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
-    
-    summary_style = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -2), 8),
-        ('TOPPADDING', (0, 0), (-1, -2), 8),
-        ('FONTNAME', (0, 0), (0, -2), 'Helvetica-Bold'),
-    ]
-    
-    # Highlight the balance due
-    summary_style.append(('BACKGROUND', (1, 3), (1, 3), accent_color))
-    summary_style.append(('TEXTCOLOR', (1, 3), (1, 3), colors.whitesmoke))
-    summary_style.append(('FONTNAME', (1, 3), (1, 3), 'Helvetica-Bold'))
-    summary_style.append(('FONTSIZE', (1, 3), (1, 3), 14))
-    
-    summary_table.setStyle(TableStyle(summary_style))
-    story.append(summary_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Payment status badge
-    status_bg = colors.HexColor('#d4edda')
-    status_color = colors.HexColor('#155724')
-    
-    status_style = ParagraphStyle('PaymentStatus', parent=styles['Normal'], fontSize=10,
-                                  textColor=status_color, alignment=TA_CENTER, spaceAfter=0.2*inch)
-    story.append(Paragraph("✓ DEPOSIT PAYMENT RECEIVED", status_style))
-    
-    # Divider
-    story.append(Paragraph("━" * 60, divider_style))
-    
-    # ========================================================================
-    # TERMS & CONDITIONS
-    # ========================================================================
-    
-    terms_title_style = ParagraphStyle('TermsTitle', parent=styles['Normal'], fontSize=9,
-                                       textColor=primary_color, alignment=TA_CENTER, spaceAfter=5)
-    story.append(Paragraph("<b>TERMS & CONDITIONS</b>", terms_title_style))
-    
-    terms_text = """
-    1. Items must be returned by the specified return date.<br/>
-    2. Late returns incur additional charges of KES 500 per day per item.<br/>
-    3. Customer is fully responsible for any damage or loss of equipment.<br/>
-    4. Deposit is non-refundable and secures the rental.<br/>
-    5. Balance must be paid in full upon return of equipment.
     """
-    
-    terms_style = ParagraphStyle('Terms', parent=styles['Normal'], fontSize=8,
-                                 textColor=colors.HexColor('#666666'), alignment=TA_CENTER, spaceAfter=0.2*inch)
-    story.append(Paragraph(terms_text, terms_style))
-    story.append(Spacer(1, 0.15*inch))
-    
-    # ========================================================================
+    Generate a branded PDF receipt using reportlab canvas.
+    White background, teal accents – matches the Feruzi Rentals design system.
+
+    rental_data keys expected:
+        rental_id, customer_name, customer_email, customer_phone,
+        rental_date (date), return_date (date),
+        total_cost, deposit_paid, balance_due
+
+    items_list: list of dicts with keys: item_name, daily_rate, cost
+    """
+
+    # ── Brand palette ─────────────────────────────────────────────────────────
+    TEAL      = colors.HexColor("#00C8C8")
+    TEAL_DARK = colors.HexColor("#008B8B")
+    WHITE     = colors.white
+    PAGE_BG   = colors.white                          # ← white background
+    CARD_BG   = colors.HexColor("#F0FAFA")            # very light teal tint
+    ROW_ALT   = colors.HexColor("#E6F7F7")            # alternating row
+    DARK_TEXT = colors.HexColor("#0D1F2D")            # near-black for body text
+    MID_TEXT  = colors.HexColor("#4A6572")            # secondary text
+    RULE      = colors.HexColor("#B2E0E0")            # subtle rule lines
+
+    W, H   = A4
+    margin = 18 * mm
+    body_w = W - 2 * margin
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    # ── Helper: right-aligned text ────────────────────────────────────────────
+    def right_text(text, x_right, y, font, size, col):
+        c.setFont(font, size)
+        c.setFillColor(col)
+        tw = c.stringWidth(text, font, size)
+        c.drawString(x_right - tw, y, text)
+
+    # ── Helper: draw an info card (title bar + label/value rows) ─────────────
+    def info_card(bx, by, bw, bh, title, rows):
+        # Card background
+        c.setFillColor(CARD_BG)
+        c.roundRect(bx, by, bw, bh, 2 * mm, fill=1, stroke=0)
+        # Teal title strip
+        c.setFillColor(TEAL)
+        c.roundRect(bx, by + bh - 8 * mm, bw, 8 * mm, 2 * mm, fill=1, stroke=0)
+        c.rect(bx, by + bh - 8 * mm, bw, 4 * mm, fill=1, stroke=0)  # flatten bottom corners
+        c.setFont("Helvetica-Bold", 8.5)
+        c.setFillColor(WHITE)
+        c.drawString(bx + 3 * mm, by + bh - 5.5 * mm, title.upper())
+        # Teal left accent line
+        c.setFillColor(TEAL)
+        c.rect(bx, by, 2, bh - 8 * mm, fill=1, stroke=0)
+        # Rows
+        row_h = (bh - 10 * mm) / max(len(rows), 1)
+        for j, (label, value) in enumerate(rows):
+            ry = by + bh - 10 * mm - j * row_h - 1 * mm
+            c.setFont("Helvetica", 7)
+            c.setFillColor(MID_TEXT)
+            c.drawString(bx + 4 * mm, ry, label)
+            c.setFont("Helvetica-Bold", 8.5)
+            c.setFillColor(DARK_TEXT)
+            c.drawString(bx + 32 * mm, ry, str(value))
+
+    # ==========================================================================
+    # PAGE BACKGROUND
+    # ==========================================================================
+    c.setFillColor(PAGE_BG)
+    c.rect(0, 0, W, H, fill=1, stroke=0)
+
+    # ==========================================================================
+    # HEADER  (teal bar)
+    # ==========================================================================
+    header_h = 52 * mm
+    c.setFillColor(TEAL_DARK)
+    c.rect(0, H - header_h, W, header_h, fill=1, stroke=0)
+    # Bottom accent line on header
+    c.setFillColor(TEAL)
+    c.rect(0, H - header_h, W, 1.5, fill=1, stroke=0)
+
+    # Logo
+    logo_path = get_logo_path()
+    logo_size = 40 * mm
+    if logo_path:
+        try:
+            logo = ImageReader(logo_path)
+            c.drawImage(logo, margin, H - header_h + 6 * mm,
+                        width=logo_size, height=logo_size,
+                        preserveAspectRatio=True, mask="auto")
+        except Exception:
+            pass
+
+    # Company name + tagline
+    tx = margin + logo_size + 6 * mm
+    c.setFont("Helvetica-Bold", 21)
+    c.setFillColor(WHITE)
+    c.drawString(tx, H - 16 * mm, "FERUZI RENTALS")
+    c.setFont("Helvetica", 8.5)
+    c.setFillColor(colors.HexColor("#C0EEEE"))
+    c.drawString(tx, H - 23 * mm, "Film. Photography. Possibility.")
+    c.drawString(tx, H - 30 * mm, "Nairobi, Kenya   |   info@feruzirentals.co.ke")
+    c.drawString(tx, H - 36 * mm, "+254 700 000 000   |   www.feruzirentals.co.ke")
+
+    # RENTAL RECEIPT badge (top-right of header)
+    badge_w, badge_h = 50 * mm, 16 * mm
+    badge_x = W - margin - badge_w
+    badge_y = H - 15 * mm - badge_h
+    c.setFillColor(WHITE)
+    c.roundRect(badge_x, badge_y, badge_w, badge_h, 2 * mm, fill=1, stroke=0)
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(TEAL_DARK)
+    label = "RENTAL RECEIPT"
+    lw = c.stringWidth(label, "Helvetica-Bold", 12)
+    c.drawString(badge_x + (badge_w - lw) / 2, badge_y + 5 * mm, label)
+
+    # ==========================================================================
+    # RECEIPT META  (receipt no / date / due date)
+    # ==========================================================================
+    meta_y = H - header_h - 18 * mm
+    col_w  = body_w / 3
+
+    # Light teal meta bar
+    c.setFillColor(CARD_BG)
+    c.roundRect(margin, meta_y, body_w, 14 * mm, 2 * mm, fill=1, stroke=0)
+    c.setStrokeColor(RULE)
+    c.setLineWidth(0.5)
+    c.roundRect(margin, meta_y, body_w, 14 * mm, 2 * mm, fill=0, stroke=1)
+
+    meta_fields = [
+        ("Receipt No.",  rental_data.get("rental_id", "—")),
+        ("Issue Date",   datetime.date.today().strftime("%d %B %Y")),
+        ("Return Date",  rental_data["return_date"].strftime("%d %B %Y")
+                         if hasattr(rental_data["return_date"], "strftime")
+                         else str(rental_data["return_date"])),
+    ]
+    for i, (lbl, val) in enumerate(meta_fields):
+        mx = margin + 4 * mm + i * col_w
+        c.setFont("Helvetica", 7)
+        c.setFillColor(TEAL_DARK)
+        c.drawString(mx, meta_y + 9 * mm, lbl.upper())
+        c.setFont("Helvetica-Bold", 9.5)
+        c.setFillColor(DARK_TEXT)
+        c.drawString(mx, meta_y + 3 * mm, str(val))
+
+    # ==========================================================================
+    # CLIENT DETAILS  +  RENTAL PERIOD  (side-by-side cards)
+    # ==========================================================================
+    days = (rental_data["return_date"] - rental_data["rental_date"]).days \
+           if hasattr(rental_data["return_date"], "strftime") else 0
+
+    cards_y  = meta_y - 4 * mm - 36 * mm
+    card_h   = 36 * mm
+    half     = (body_w - 4 * mm) / 2
+
+    info_card(
+        margin, cards_y, half, card_h,
+        "Client Details",
+        [
+            ("Name",     rental_data["customer_name"]),
+            ("Phone",    rental_data["customer_phone"]),
+            ("Email",    rental_data["customer_email"]),
+        ]
+    )
+    info_card(
+        margin + half + 4 * mm, cards_y, half, card_h,
+        "Rental Period",
+        [
+            ("Start Date", rental_data["rental_date"].strftime("%d %B %Y")
+                           if hasattr(rental_data["rental_date"], "strftime")
+                           else str(rental_data["rental_date"])),
+            ("End Date",   rental_data["return_date"].strftime("%d %B %Y")
+                           if hasattr(rental_data["return_date"], "strftime")
+                           else str(rental_data["return_date"])),
+            ("Duration",   f"{days} day{'s' if days != 1 else ''}"),
+        ]
+    )
+
+    # ==========================================================================
+    # ITEMS TABLE
+    # ==========================================================================
+    table_top = cards_y - 5 * mm
+
+    headers = ["#", "Item / Description", "Day Rate (KES)", "Days", "Subtotal (KES)"]
+    col_widths = [8 * mm, 84 * mm, 32 * mm, 16 * mm, 32 * mm]
+    table_data = [headers]
+
+    for idx, item in enumerate(items_list, 1):
+        daily_rate = float(item.get("daily_rate", 0))
+        cost       = float(item.get("cost", 0))
+        item_days  = int(round(cost / daily_rate)) if daily_rate else days
+        table_data.append([
+            str(idx),
+            item.get("item_name", "—"),
+            f"{daily_rate:,.2f}",
+            str(item_days),
+            f"{cost:,.2f}",
+        ])
+
+    tbl = Table(table_data, colWidths=col_widths, rowHeights=7.5 * mm)
+    tbl.setStyle(TableStyle([
+        # Header row
+        ("BACKGROUND",    (0, 0), (-1,  0), TEAL),
+        ("TEXTCOLOR",     (0, 0), (-1,  0), WHITE),
+        ("FONTNAME",      (0, 0), (-1,  0), "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1,  0), 8),
+        ("ALIGN",         (0, 0), (-1,  0), "CENTER"),
+        # Body rows – alternating
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, ROW_ALT]),
+        ("TEXTCOLOR",     (0, 1), (-1, -1), DARK_TEXT),
+        ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE",      (0, 1), (-1, -1), 8.5),
+        # Column alignment
+        ("ALIGN",         (0, 1), (0, -1), "CENTER"),   # #
+        ("ALIGN",         (1, 1), (1, -1), "LEFT"),     # description
+        ("ALIGN",         (2, 1), (4, -1), "RIGHT"),    # rates
+        ("ALIGN",         (3, 1), (3, -1), "CENTER"),   # days
+        ("ALIGN",         (2, 0), (4,  0), "RIGHT"),
+        # Padding
+        ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        # Borders
+        ("LINEBELOW",     (0, 0), (-1,  0), 1,   TEAL_DARK),
+        ("LINEBELOW",     (0, 1), (-1, -1), 0.3, RULE),
+        ("BOX",           (0, 0), (-1, -1), 0.5, RULE),
+    ]))
+
+    tbl_w, tbl_h = tbl.wrapOn(c, body_w, 999)
+    tbl_y = table_top - tbl_h
+    tbl.drawOn(c, margin, tbl_y)
+
+    # ==========================================================================
+    # TOTALS  (right column)  +  TERMS  (left column)
+    # ==========================================================================
+    section_y = tbl_y - 5 * mm
+    tot_w     = 72 * mm
+    tot_x     = W - margin - tot_w
+
+    total_cost  = float(rental_data.get("total_cost",  0))
+    deposit     = float(rental_data.get("deposit_paid", 0))
+    balance_due = float(rental_data.get("balance_due",  0))
+
+    tot_rows = [
+        ("Total Rental Cost",    f"KES {total_cost:,.2f}",  False, False),
+        ("Deposit Paid",         f"KES {deposit:,.2f}",     False, False),
+        ("TOTAL",                f"KES {total_cost:,.2f}",  True,  True ),
+        ("Amount Paid",          f"KES {deposit:,.2f}",     False, False),
+        ("BALANCE DUE",          f"KES {balance_due:,.2f}", True,  True ),
+    ]
+
+    row_h = 7 * mm
+    box_h = len(tot_rows) * row_h + 6 * mm
+
+    # Card background
+    c.setFillColor(CARD_BG)
+    c.roundRect(tot_x, section_y - box_h, tot_w, box_h, 2 * mm, fill=1, stroke=0)
+    c.setStrokeColor(RULE)
+    c.setLineWidth(0.5)
+    c.roundRect(tot_x, section_y - box_h, tot_w, box_h, 2 * mm, fill=0, stroke=1)
+
+    for i, (label, val, bold, highlight) in enumerate(tot_rows):
+        ry = section_y - 9 * mm - i * row_h
+        if highlight:
+            c.setFillColor(TEAL)
+            c.rect(tot_x, ry - 2 * mm, tot_w, row_h, fill=1, stroke=0)
+            text_col = WHITE
+        else:
+            text_col = TEAL_DARK if bold else MID_TEXT
+        font = "Helvetica-Bold" if bold else "Helvetica"
+        size = 9 if bold else 8
+        c.setFont(font, size)
+        c.setFillColor(text_col)
+        c.drawString(tot_x + 4 * mm, ry, label)
+        right_text(val, tot_x + tot_w - 4 * mm, ry, font, size, text_col)
+        if not highlight:
+            c.setStrokeColor(RULE)
+            c.setLineWidth(0.3)
+            c.line(tot_x + 3 * mm, ry - 2 * mm, tot_x + tot_w - 3 * mm, ry - 2 * mm)
+
+    # Terms & Conditions (left of totals)
+    notes_w = tot_x - margin - 4 * mm
+    c.setFillColor(CARD_BG)
+    c.roundRect(margin, section_y - box_h, notes_w, box_h, 2 * mm, fill=1, stroke=0)
+    c.setStrokeColor(RULE)
+    c.setLineWidth(0.5)
+    c.roundRect(margin, section_y - box_h, notes_w, box_h, 2 * mm, fill=0, stroke=1)
+    # Teal left accent
+    c.setFillColor(TEAL)
+    c.rect(margin, section_y - box_h, 2, box_h, fill=1, stroke=0)
+
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(TEAL_DARK)
+    c.drawString(margin + 4 * mm, section_y - 7 * mm, "TERMS & CONDITIONS")
+
+    terms = [
+        "• Equipment must be returned by the agreed return date.",
+        "• Late returns incur a 50% daily surcharge on the full rate.",
+        "• Customer is responsible for any damage or loss of equipment.",
+        "• Deposit is non-refundable and secures the rental.",
+        "• Balance must be paid in full upon return of equipment.",
+    ]
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(MID_TEXT)
+    for i, line in enumerate(terms):
+        c.drawString(margin + 4 * mm, section_y - 14 * mm - i * 5 * mm, line)
+
+    # ==========================================================================
+    # SIGNATURE LINES
+    # ==========================================================================
+    sig_y    = section_y - box_h - 7 * mm
+    sig_half = (body_w - 8 * mm) / 2
+    for i, label in enumerate(["Client Signature & Date", "Authorized by Feruzi Rentals"]):
+        sx = margin + i * (sig_half + 8 * mm)
+        c.setStrokeColor(TEAL)
+        c.setLineWidth(0.5)
+        c.line(sx, sig_y, sx + sig_half, sig_y)
+        c.setFont("Helvetica", 7.5)
+        c.setFillColor(MID_TEXT)
+        c.drawString(sx, sig_y - 4 * mm, label)
+
+    # ==========================================================================
     # FOOTER
-    # ========================================================================
-    
-    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8,
-                                  textColor=colors.HexColor('#999999'), alignment=TA_CENTER)
-    story.append(Paragraph("Thank you for choosing Feruzi Rentals!", footer_style))
-    story.append(Paragraph("Follow us on Instagram: @feruzirentals", footer_style))
-    
-    # Build PDF
-    doc.build(story)
+    # ==========================================================================
+    c.setFillColor(TEAL)
+    c.rect(0, 10 * mm, W, 1.5, fill=1, stroke=0)
+    c.setFont("Helvetica", 7)
+    c.setFillColor(MID_TEXT)
+    footer = "Thank you for choosing Feruzi Rentals  •  Film. Photography. Possibility.  •  www.feruzirentals.co.ke"
+    fw = c.stringWidth(footer, "Helvetica", 7)
+    c.drawString((W - fw) / 2, 5.5 * mm, footer)
+
+    c.save()
     buffer.seek(0)
     return buffer
 
