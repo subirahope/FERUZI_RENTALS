@@ -15,11 +15,11 @@ import base64
 import requests
 import tempfile
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.units import inch, mm
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -97,7 +97,6 @@ def display_centered_logo(width=200):
 
 def fix_dataframe_dtypes():
     """Ensure all columns have correct data types"""
-    # Fix inventory dataframe
     if 'current_renter' in st.session_state.inventory.columns:
         st.session_state.inventory['current_renter'] = st.session_state.inventory['current_renter'].astype(str)
         st.session_state.inventory['current_renter'] = st.session_state.inventory['current_renter'].replace('nan', '')
@@ -108,7 +107,6 @@ def fix_dataframe_dtypes():
     if 'status' in st.session_state.inventory.columns:
         st.session_state.inventory['status'] = st.session_state.inventory['status'].astype(str)
     
-    # Fix rentals dataframe
     if 'rental_id' in st.session_state.rentals.columns:
         st.session_state.rentals['rental_id'] = st.session_state.rentals['rental_id'].astype(str)
     if 'customer_name' in st.session_state.rentals.columns:
@@ -141,7 +139,6 @@ def load_data():
                 else:
                     st.session_state.rentals['balance_due'] = 0
         
-        # Fix data types after loading
         fix_dataframe_dtypes()
         
     except Exception as e:
@@ -151,276 +148,87 @@ def load_sample_data():
     """Load sample data if no data exists"""
     if st.session_state.inventory.empty:
         sample_items = [
-            {
-                'item_id': 'CAM001',
-                'item_name': 'Sony A7III',
-                'category': 'Camera Body',
-                'brand': 'Sony',
-                'model': 'A7III',
-                'serial_number': 'SN123456',
-                'daily_rate': 5000.0,
-                'status': 'Available',
-                'current_renter': ''
-            },
-            {
-                'item_id': 'LEN001',
-                'item_name': 'Canon 24-70mm f/2.8',
-                'category': 'Lens',
-                'brand': 'Canon',
-                'model': '24-70mm',
-                'serial_number': 'SN789012',
-                'daily_rate': 3500.0,
-                'status': 'Available',
-                'current_renter': ''
-            },
-            {
-                'item_id': 'CAM002',
-                'item_name': 'Nikon Z6',
-                'category': 'Camera Body',
-                'brand': 'Nikon',
-                'model': 'Z6',
-                'serial_number': 'SN345678',
-                'daily_rate': 4500.0,
-                'status': 'Available',
-                'current_renter': ''
-            }
+            {'item_id': 'CAM001', 'item_name': 'Sony A7III', 'category': 'Camera Body', 'brand': 'Sony', 'model': 'A7III', 'serial_number': 'SN123456', 'daily_rate': 5000.0, 'status': 'Available', 'current_renter': ''},
+            {'item_id': 'LEN001', 'item_name': 'Canon 24-70mm f/2.8', 'category': 'Lens', 'brand': 'Canon', 'model': '24-70mm', 'serial_number': 'SN789012', 'daily_rate': 3500.0, 'status': 'Available', 'current_renter': ''},
+            {'item_id': 'CAM002', 'item_name': 'Nikon Z6', 'category': 'Camera Body', 'brand': 'Nikon', 'model': 'Z6', 'serial_number': 'SN345678', 'daily_rate': 4500.0, 'status': 'Available', 'current_renter': ''}
         ]
         st.session_state.inventory = pd.DataFrame(sample_items)
 
 # ============================================================================
-# PDF RECEIPT GENERATION
-# ============================================================================
-
-def create_receipt_pdf(rental_data):
-    """Generate PDF receipt for rental"""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
-    
-    styles = getSampleStyleSheet()
-    story = []
-    
-    # Add logo
-    logo_added = False
-    logo_paths_to_try = [
-        "feruzi_logo.png",
-        "logo.png", 
-        "favicon.ico",
-        os.path.join(APP_DIR, "feruzi_logo.png"),
-        os.path.join(APP_DIR, "logo.png"),
-    ]
-    
-    for logo_path in logo_paths_to_try:
-        if os.path.exists(logo_path):
-            try:
-                img = Image(logo_path, width=2*inch, height=2*inch)
-                img.hAlign = 'CENTER'
-                story.append(img)
-                story.append(Spacer(1, 0.2*inch))
-                logo_added = True
-                break
-            except Exception as e:
-                continue
-    
-    if not logo_added:
-        logo_base64_data = get_logo_image()
-        if logo_base64_data:
-            try:
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                    tmp_file.write(base64.b64decode(logo_base64_data))
-                    tmp_path = tmp_file.name
-                
-                img = Image(tmp_path, width=2*inch, height=2*inch)
-                img.hAlign = 'CENTER'
-                story.append(img)
-                story.append(Spacer(1, 0.2*inch))
-                logo_added = True
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
-            except Exception as e:
-                pass
-    
-    # Company header
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
-                                 textColor=colors.HexColor('#2c3e50'), alignment=TA_CENTER, spaceAfter=10)
-    story.append(Paragraph("FERUZI RENTALS", title_style))
-    
-    tagline_style = ParagraphStyle('Tagline', parent=styles['Normal'], fontSize=10,
-                                   textColor=colors.HexColor('#7f8c8d'), alignment=TA_CENTER, spaceAfter=30)
-    story.append(Paragraph("FILM.PHOTOGRAPHY.POSSIBILITY.", tagline_style))
-    
-    # Receipt title
-    receipt_title = ParagraphStyle('ReceiptTitle', parent=styles['Heading2'], fontSize=16,
-                                   textColor=colors.HexColor('#34495e'), alignment=TA_CENTER, spaceAfter=20)
-    story.append(Paragraph(f"RENTAL RECEIPT #{rental_data['rental_id']}", receipt_title))
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Customer information
-    customer_data = [
-        ['Customer Name:', rental_data['customer_name']],
-        ['Email:', rental_data['customer_email']],
-        ['Phone:', rental_data['customer_phone']],
-        ['Date Issued:', datetime.date.today().strftime('%Y-%m-%d')]
-    ]
-    
-    customer_table = Table(customer_data, colWidths=[1.5*inch, 3*inch])
-    customer_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#2c3e50')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-    ]))
-    story.append(customer_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Rental details
-    daily_rate = rental_data.get('daily_rate', 0)
-    days = (rental_data['return_date'] - rental_data['rental_date']).days
-    rental_subtotal = days * daily_rate
-    
-    rental_details = [
-        ['Item Rented:', rental_data['item_name']],
-        ['Rental Date:', rental_data['rental_date'].strftime('%Y-%m-%d')],
-        ['Return Date:', rental_data['return_date'].strftime('%Y-%m-%d')],
-        ['Duration (Days):', str(days)],
-        ['Daily Rate:', f"KES {daily_rate:,.2f}"],
-        ['Total Rental Cost:', f"KES {rental_subtotal:,.2f}"],
-        ['Deposit Paid (Today):', f"KES {rental_data.get('deposit_paid', 0):,.2f}"],
-        ['Balance Due (On Return):', f"KES {rental_data.get('balance_due', 0):,.2f}"]
-    ]
-    
-    rental_table = Table(rental_details, colWidths=[1.5*inch, 3*inch])
-    
-    table_style = [
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#2c3e50')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-    ]
-    
-    table_style.append(('BACKGROUND', (0, 6), (-1, 6), colors.HexColor('#d4edda')))
-    table_style.append(('TEXTCOLOR', (0, 6), (-1, 6), colors.HexColor('#155724')))
-    table_style.append(('BACKGROUND', (0, 7), (-1, 7), colors.HexColor('#fff3cd')))
-    table_style.append(('TEXTCOLOR', (0, 7), (-1, 7), colors.HexColor('#856404')))
-    
-    rental_table.setStyle(TableStyle(table_style))
-    story.append(rental_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Payment instructions
-    payment_style = ParagraphStyle('PaymentStatus', parent=styles['Normal'], fontSize=10,
-                                   textColor=colors.HexColor('#28a745'), alignment=TA_CENTER, spaceAfter=20)
-    story.append(Paragraph("<b>✓ Deposit Payment Received</b>", payment_style))
-    
-    # Terms
-    terms_style = ParagraphStyle('Terms', parent=styles['Normal'], fontSize=8,
-                                 textColor=colors.grey, alignment=TA_CENTER)
-    terms_text = """
-    <b>Payment Terms:</b><br/>
-    1. Deposit paid today secures the rental<br/>
-    2. Balance must be paid upon return of equipment<br/>
-    3. Late returns incur additional charges of KES 500 per day<br/>
-    4. Customer is responsible for any damage to equipment
-    """
-    story.append(Paragraph(terms_text, terms_style))
-    story.append(Spacer(1, 0.2*inch))
-    
-    # Footer
-    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8,
-                                  textColor=colors.grey, alignment=TA_CENTER)
-    story.append(Paragraph("Thank you for choosing Feruzi Rentals!", footer_style))
-    
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
-# ============================================================================
-# MULTI-ITEM PDF RECEIPT GENERATION
+# PROFESSIONAL PDF RECEIPT GENERATION
 # ============================================================================
 
 def create_multi_item_receipt_pdf(rental_data, items_list):
-    """Generate PDF receipt for multi-item rental"""
+    """Generate professional redesigned PDF receipt for multi-item rental"""
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+    doc = SimpleDocTemplate(buffer, pagesize=letter, 
+                           rightMargin=0.75*inch, leftMargin=0.75*inch, 
+                           topMargin=0.75*inch, bottomMargin=0.75*inch)
     
     styles = getSampleStyleSheet()
     story = []
     
+    # Custom colors
+    primary_color = colors.HexColor('#1a1a2e')
+    secondary_color = colors.HexColor('#e94560')
+    accent_color = colors.HexColor('#0f3460')
+    light_gray = colors.HexColor('#f8f9fa')
+    border_gray = colors.HexColor('#dee2e6')
+    
     # ========================================================================
-    # ADD LOGO TO PDF - Using the same logic as the app
+    # HEADER SECTION
     # ========================================================================
     
+    # Logo
     logo_added = False
-    
-    # Try to get logo from various sources
-    logo_paths_to_try = [
-        "feruzi_logo.png",
-        "logo.png", 
-        "favicon.ico",
-        os.path.join(APP_DIR, "feruzi_logo.png"),
-        os.path.join(APP_DIR, "logo.png"),
-        os.path.join(APP_DIR, "favicon.ico"),
-    ]
+    logo_paths_to_try = ["feruzi_logo.png", "logo.png", "favicon.ico", 
+                         os.path.join(APP_DIR, "feruzi_logo.png"),
+                         os.path.join(APP_DIR, "logo.png")]
     
     for logo_path in logo_paths_to_try:
         if os.path.exists(logo_path):
             try:
-                img = Image(logo_path, width=2*inch, height=2*inch)
+                img = Image(logo_path, width=1.2*inch, height=1.2*inch)
                 img.hAlign = 'CENTER'
                 story.append(img)
-                story.append(Spacer(1, 0.2*inch))
+                story.append(Spacer(1, 0.15*inch))
                 logo_added = True
                 break
-            except Exception as e:
+            except:
                 continue
     
-    # If no local logo found, try to use base64 encoded logo from get_logo_image()
-    if not logo_added:
-        logo_base64_data = get_logo_image()
-        if logo_base64_data:
-            try:
-                # Decode base64 to bytes and save temporarily
-                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                    tmp_file.write(base64.b64decode(logo_base64_data))
-                    tmp_path = tmp_file.name
-                
-                img = Image(tmp_path, width=2*inch, height=2*inch)
-                img.hAlign = 'CENTER'
-                story.append(img)
-                story.append(Spacer(1, 0.2*inch))
-                logo_added = True
-                
-                # Clean up temp file
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
-            except Exception as e:
-                pass
-    
-    # Company header
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], fontSize=24,
-                                 textColor=colors.HexColor('#2c3e50'), alignment=TA_CENTER, spaceAfter=10)
+    # Company Name
+    title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22,
+                                 textColor=primary_color, alignment=TA_CENTER, spaceAfter=5)
     story.append(Paragraph("FERUZI RENTALS", title_style))
     
     tagline_style = ParagraphStyle('Tagline', parent=styles['Normal'], fontSize=10,
-                                   textColor=colors.HexColor('#7f8c8d'), alignment=TA_CENTER, spaceAfter=30)
-    story.append(Paragraph("FILM.PHOTOGRAPHY.POSSIBILITY.", tagline_style))
+                                   textColor=colors.HexColor('#666666'), alignment=TA_CENTER, spaceAfter=0.25*inch)
+    story.append(Paragraph("Film. Photography. Possibility.", tagline_style))
     
-    # Receipt title
-    receipt_title = ParagraphStyle('ReceiptTitle', parent=styles['Heading2'], fontSize=16,
-                                   textColor=colors.HexColor('#34495e'), alignment=TA_CENTER, spaceAfter=20)
-    story.append(Paragraph(f"RENTAL RECEIPT #{rental_data['rental_id']}", receipt_title))
-    story.append(Spacer(1, 0.2*inch))
+    # Divider
+    divider_style = ParagraphStyle('Divider', parent=styles['Normal'], fontSize=8,
+                                   textColor=border_gray, alignment=TA_CENTER, spaceAfter=0.2*inch)
+    story.append(Paragraph("━" * 60, divider_style))
     
-    # Customer information
+    # Receipt Title
+    receipt_title_style = ParagraphStyle('ReceiptTitle', parent=styles['Heading2'], fontSize=16,
+                                         textColor=secondary_color, alignment=TA_CENTER, spaceAfter=5)
+    story.append(Paragraph("RENTAL RECEIPT", receipt_title_style))
+    
+    receipt_id_style = ParagraphStyle('ReceiptID', parent=styles['Normal'], fontSize=10,
+                                      textColor=colors.HexColor('#888888'), alignment=TA_CENTER, spaceAfter=0.3*inch)
+    story.append(Paragraph(f"ID: {rental_data['rental_id']}", receipt_id_style))
+    
+    # ========================================================================
+    # CUSTOMER INFORMATION SECTION
+    # ========================================================================
+    
+    # Section Header
+    section_header_style = ParagraphStyle('SectionHeader', parent=styles['Heading3'], fontSize=12,
+                                          textColor=primary_color, spaceAfter=0.1*inch, spaceBefore=0.2*inch)
+    story.append(Paragraph("CUSTOMER INFORMATION", section_header_style))
+    
     customer_data = [
         ['Customer Name:', rental_data['customer_name']],
         ['Email:', rental_data['customer_email']],
@@ -428,41 +236,58 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
         ['Date Issued:', datetime.date.today().strftime('%Y-%m-%d')]
     ]
     
-    customer_table = Table(customer_data, colWidths=[1.5*inch, 3*inch])
+    customer_table = Table(customer_data, colWidths=[1.5*inch, 3.5*inch])
     customer_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#2c3e50')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
     ]))
     story.append(customer_table)
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Spacer(1, 0.2*inch))
     
-    # Rental period
+    # ========================================================================
+    # RENTAL PERIOD SECTION
+    # ========================================================================
+    
+    story.append(Paragraph("RENTAL PERIOD", section_header_style))
+    
     days = (rental_data['return_date'] - rental_data['rental_date']).days
     period_data = [
-        ['Rental Date:', rental_data['rental_date'].strftime('%Y-%m-%d')],
+        ['Check-out Date:', rental_data['rental_date'].strftime('%Y-%m-%d')],
         ['Return Date:', rental_data['return_date'].strftime('%Y-%m-%d')],
-        ['Duration (Days):', str(days)]
+        ['Duration:', f"{days} day(s)"]
     ]
     
-    period_table = Table(period_data, colWidths=[1.5*inch, 3*inch])
+    period_table = Table(period_data, colWidths=[1.5*inch, 3.5*inch])
     period_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#333333')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
     ]))
     story.append(period_table)
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Spacer(1, 0.2*inch))
     
-    # Items rented table
-    story.append(Paragraph("<b>Items Rented:</b>", styles['Normal']))
+    # ========================================================================
+    # ITEMS RENTED TABLE
+    # ========================================================================
     
-    item_table_data = [['Item', 'Daily Rate', 'Total Cost']]
+    story.append(Paragraph("ITEMS RENTED", section_header_style))
+    
+    # Table header
+    item_table_data = [['Item', 'Daily Rate', 'Total']]
+    
     for item in items_list:
         item_table_data.append([
             item['item_name'],
@@ -470,61 +295,118 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
             f"KES {item['cost']:,.2f}"
         ])
     
-    item_table = Table(item_table_data, colWidths=[2.5*inch, 1.5*inch, 1.5*inch])
-    item_table.setStyle(TableStyle([
+    col_widths = [3.5*inch, 1.2*inch, 1.5*inch]
+    item_table = Table(item_table_data, colWidths=col_widths, repeatRows=1)
+    
+    # Style the table
+    table_style = [
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (2, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, border_gray),
+        ('BACKGROUND', (0, 0), (-1, 0), primary_color),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ]))
-    story.append(item_table)
-    story.append(Spacer(1, 0.3*inch))
-    
-    # Payment summary
-    summary_data = [
-        ['Total Rental Cost:', f"KES {rental_data['total_cost']:,.2f}"],
-        ['Deposit Paid (Today):', f"KES {rental_data['deposit_paid']:,.2f}"],
-        ['Balance Due (On Return):', f"KES {rental_data['balance_due']:,.2f}"]
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
     ]
     
-    summary_table = Table(summary_data, colWidths=[2*inch, 2.5*inch])
-    summary_table.setStyle(TableStyle([
+    # Add alternating row colors
+    for i in range(1, len(item_table_data)):
+        if i % 2 == 1:
+            table_style.append(('BACKGROUND', (0, i), (-1, i), light_gray))
+    
+    item_table.setStyle(TableStyle(table_style))
+    story.append(item_table)
+    story.append(Spacer(1, 0.25*inch))
+    
+    # ========================================================================
+    # PAYMENT SUMMARY
+    # ========================================================================
+    
+    story.append(Paragraph("PAYMENT SUMMARY", section_header_style))
+    
+    total_cost = rental_data['total_cost']
+    deposit = rental_data['deposit_paid']
+    balance = rental_data['balance_due']
+    
+    # Create a boxed summary
+    summary_data = [
+        ['Total Rental Cost:', f"KES {total_cost:,.2f}"],
+        ['Deposit Paid (Today):', f"KES {deposit:,.2f}"],
+        ['', ''],
+        ['Balance Due on Return:', f"KES {balance:,.2f}"]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[2.5*inch, 2.5*inch])
+    
+    summary_style = [
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
-        ('BACKGROUND', (1, 2), (1, 2), colors.HexColor('#fff3cd')),
-        ('TEXTCOLOR', (1, 2), (1, 2), colors.HexColor('#856404')),
-    ]))
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -2), 8),
+        ('TOPPADDING', (0, 0), (-1, -2), 8),
+        ('FONTNAME', (0, 0), (0, -2), 'Helvetica-Bold'),
+    ]
+    
+    # Highlight the balance due
+    summary_style.append(('BACKGROUND', (1, 3), (1, 3), accent_color))
+    summary_style.append(('TEXTCOLOR', (1, 3), (1, 3), colors.whitesmoke))
+    summary_style.append(('FONTNAME', (1, 3), (1, 3), 'Helvetica-Bold'))
+    summary_style.append(('FONTSIZE', (1, 3), (1, 3), 14))
+    
+    summary_table.setStyle(TableStyle(summary_style))
     story.append(summary_table)
     story.append(Spacer(1, 0.3*inch))
     
-    # Payment status
-    payment_style = ParagraphStyle('PaymentStatus', parent=styles['Normal'], fontSize=10,
-                                   textColor=colors.HexColor('#28a745'), alignment=TA_CENTER, spaceAfter=20)
-    story.append(Paragraph("<b>✓ Deposit Payment Received</b>", payment_style))
+    # Payment status badge
+    status_bg = colors.HexColor('#d4edda')
+    status_color = colors.HexColor('#155724')
     
-    # Terms
-    terms_style = ParagraphStyle('Terms', parent=styles['Normal'], fontSize=8,
-                                 textColor=colors.grey, alignment=TA_CENTER)
+    status_style = ParagraphStyle('PaymentStatus', parent=styles['Normal'], fontSize=10,
+                                  textColor=status_color, alignment=TA_CENTER, spaceAfter=0.2*inch)
+    story.append(Paragraph("✓ DEPOSIT PAYMENT RECEIVED", status_style))
+    
+    # Divider
+    story.append(Paragraph("━" * 60, divider_style))
+    
+    # ========================================================================
+    # TERMS & CONDITIONS
+    # ========================================================================
+    
+    terms_title_style = ParagraphStyle('TermsTitle', parent=styles['Normal'], fontSize=9,
+                                       textColor=primary_color, alignment=TA_CENTER, spaceAfter=5)
+    story.append(Paragraph("<b>TERMS & CONDITIONS</b>", terms_title_style))
+    
     terms_text = """
-    <b>Payment Terms:</b><br/>
-    1. Deposit paid today secures the rental<br/>
-    2. Balance must be paid upon return of equipment<br/>
-    3. Late returns incur additional charges of KES 500 per day per item<br/>
-    4. Customer is responsible for any damage to equipment
+    1. Items must be returned by the specified return date.<br/>
+    2. Late returns incur additional charges of KES 500 per day per item.<br/>
+    3. Customer is fully responsible for any damage or loss of equipment.<br/>
+    4. Deposit is non-refundable and secures the rental.<br/>
+    5. Balance must be paid in full upon return of equipment.
     """
+    
+    terms_style = ParagraphStyle('Terms', parent=styles['Normal'], fontSize=8,
+                                 textColor=colors.HexColor('#666666'), alignment=TA_CENTER, spaceAfter=0.2*inch)
     story.append(Paragraph(terms_text, terms_style))
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.15*inch))
     
-    # Footer
+    # ========================================================================
+    # FOOTER
+    # ========================================================================
+    
     footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8,
-                                  textColor=colors.grey, alignment=TA_CENTER)
+                                  textColor=colors.HexColor('#999999'), alignment=TA_CENTER)
     story.append(Paragraph("Thank you for choosing Feruzi Rentals!", footer_style))
+    story.append(Paragraph("Follow us on Instagram: @feruzirentals", footer_style))
     
+    # Build PDF
     doc.build(story)
     buffer.seek(0)
     return buffer
@@ -533,7 +415,6 @@ def create_multi_item_receipt_pdf(rental_data, items_list):
 # PAGE CONFIGURATION
 # ============================================================================
 
-# Page config with favicon
 logo_base64 = get_logo_image()
 if logo_base64:
     st.set_page_config(
@@ -608,11 +489,11 @@ def main():
         with col2:
             st.image(f"data:image/png;base64,{logo_base64_sidebar}", use_container_width=True)
     else:
-        st.sidebar.markdown("### 📷 FERUZI RENTALS")
+        st.sidebar.markdown("### FERUZI RENTALS")
         st.sidebar.markdown("*Film.Photography.Possibility.*")
     
     st.sidebar.markdown("---")
-    st.sidebar.title("📋 Navigation")
+    st.sidebar.title("Navigation")
     
     menu = st.sidebar.selectbox(
         "Choose an option",
@@ -633,7 +514,6 @@ def main():
         st.markdown('<p style="text-align: center; font-size: 1.2rem; color: #7f8c8d;">FILM.PHOTOGRAPHY.POSSIBILITY.</p>', unsafe_allow_html=True)
         st.markdown("---")
         
-        # Metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -682,8 +562,7 @@ def main():
         
         st.markdown("---")
         
-        # Recent Rentals
-        st.subheader("📊 Recent Rentals")
+        st.subheader("Recent Rentals")
         if not st.session_state.rentals.empty:
             recent = st.session_state.rentals.tail(5)
             display_df = recent.copy()
@@ -693,8 +572,7 @@ def main():
                 display_df['balance_due'] = display_df['balance_due'].apply(lambda x: format_kes(x))
             st.dataframe(display_df[['rental_id', 'customer_name', 'rental_date', 'return_date', 'deposit_paid', 'balance_due', 'status']], use_container_width=True)
         
-        # Inventory Status
-        st.subheader("📦 Current Inventory Status")
+        st.subheader("Current Inventory Status")
         inventory_display = st.session_state.inventory[['item_id', 'item_name', 'category', 'status', 'current_renter']].copy()
         st.dataframe(inventory_display, use_container_width=True)
     
@@ -735,7 +613,7 @@ def main():
                         st.session_state.inventory = pd.concat([st.session_state.inventory, new_item], ignore_index=True)
                         fix_dataframe_dtypes()
                         save_data()
-                        st.success(f"✅ {item_name} added successfully!")
+                        st.success(f"{item_name} added successfully!")
                         st.rerun()
                     else:
                         st.error("Please fill in all required fields (*)")
@@ -757,13 +635,13 @@ def main():
                                 st.session_state.inventory.loc[st.session_state.inventory['item_name'] == new_item_name, 'status'] = new_status
                                 fix_dataframe_dtypes()
                                 save_data()
-                                st.success("✅ Item updated!")
+                                st.success("Item updated!")
                                 st.rerun()
                         with col2:
                             if st.form_submit_button("Delete", type="secondary"):
                                 st.session_state.inventory = st.session_state.inventory[st.session_state.inventory['item_name'] != item_to_edit]
                                 save_data()
-                                st.warning("🗑️ Item deleted!")
+                                st.warning("Item deleted!")
                                 st.rerun()
         
         with tab3:
@@ -788,7 +666,7 @@ def main():
         available_items = st.session_state.inventory[st.session_state.inventory['status'] == 'Available']
         
         if available_items.empty:
-            st.warning("⚠️ No items available for rent.")
+            st.warning("No items available for rent.")
         else:
             if 'rental_created' not in st.session_state:
                 st.session_state.rental_created = False
@@ -808,14 +686,12 @@ def main():
                 st.markdown("---")
                 st.subheader("Select Items to Rent")
                 
-                # Multi-item selection
                 selected_items = st.multiselect(
                     "Select items to rent",
                     available_items['item_name'].tolist(),
                     help="You can select multiple items"
                 )
                 
-                # Display selected items with daily rates
                 if selected_items:
                     st.write("**Selected Items:**")
                     items_data = []
@@ -834,15 +710,14 @@ def main():
                             'cost': item_cost
                         })
                     
-                    # Display items table
                     items_df = pd.DataFrame(items_data)
                     items_df['daily_rate'] = items_df['daily_rate'].apply(lambda x: format_kes(x))
                     items_df['cost'] = items_df['cost'].apply(lambda x: format_kes(x))
                     st.dataframe(items_df[['item_name', 'daily_rate', 'cost']], use_container_width=True)
                     
                     if days > 0:
-                        st.info(f"💰 Rental Period: {days} days")
-                        st.success(f"💰 Total Rental Cost: {format_kes(total_rental_cost)}")
+                        st.info(f"Rental Period: {days} days")
+                        st.success(f"Total Rental Cost: {format_kes(total_rental_cost)}")
                     else:
                         st.error("Return date must be after rental date!")
                 
@@ -853,11 +728,11 @@ def main():
                 if selected_items and days > 0:
                     balance_due = total_rental_cost - deposit
                     if balance_due > 0:
-                        st.warning(f"💰 Balance Due on Return: {format_kes(balance_due)}")
+                        st.warning(f"Balance Due on Return: {format_kes(balance_due)}")
                     elif balance_due < 0:
-                        st.error(f"⚠️ Deposit exceeds total cost! Please reduce deposit amount.")
+                        st.error(f"Deposit exceeds total cost! Please reduce deposit amount.")
                     else:
-                        st.success(f"✅ Fully paid! No balance due.")
+                        st.success(f"Fully paid! No balance due.")
                 
                 submitted = st.form_submit_button("Create Rental")
             
@@ -865,7 +740,6 @@ def main():
                 if customer_name and customer_email and customer_phone and selected_items:
                     days = (return_date - rental_date).days
                     if days > 0:
-                        # Calculate totals
                         total_rental_cost = 0
                         items_for_storage = []
                         
@@ -887,8 +761,6 @@ def main():
                             st.error("Deposit cannot exceed total rental cost!")
                         else:
                             rental_id = f"RENT{str(uuid.uuid4())[:8].upper()}"
-                            
-                            # Store items as JSON string
                             items_json = json.dumps(items_for_storage)
                             
                             new_rental = pd.DataFrame([{
@@ -907,7 +779,6 @@ def main():
                             
                             st.session_state.rentals = pd.concat([st.session_state.rentals, new_rental], ignore_index=True)
                             
-                            # Update inventory for all rented items
                             for item in items_for_storage:
                                 item_index = st.session_state.inventory[st.session_state.inventory['item_id'] == item['item_id']].index
                                 if len(item_index) > 0:
@@ -930,24 +801,23 @@ def main():
                 items = st.session_state.last_rental_data.get('items', [])
                 days_calc = (st.session_state.last_rental_data['return_date'] - st.session_state.last_rental_data['rental_date']).days
                 
-                st.success(f"✅ Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
-                st.info(f"👤 Customer: {st.session_state.last_rental_data['customer_name']}")
-                st.info(f"📅 Rental Period: {days_calc} days")
+                st.success(f"Rental created! ID: {st.session_state.last_rental_data['rental_id']}")
+                st.info(f"Customer: {st.session_state.last_rental_data['customer_name']}")
+                st.info(f"Rental Period: {days_calc} days")
                 
                 st.subheader("Items Rented:")
                 for item in items:
                     st.write(f"  • {item['item_name']} - {format_kes(item['daily_rate'])}/day = {format_kes(item['cost'])}")
                 
-                st.info(f"💰 Total Rental Cost: {format_kes(st.session_state.last_rental_data['total_cost'])}")
-                st.info(f"💰 Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
-                st.info(f"💰 Balance due on return: {format_kes(st.session_state.last_rental_data['balance_due'])}")
+                st.info(f"Total Rental Cost: {format_kes(st.session_state.last_rental_data['total_cost'])}")
+                st.info(f"Deposit paid: {format_kes(st.session_state.last_rental_data['deposit_paid'])}")
+                st.info(f"Balance due on return: {format_kes(st.session_state.last_rental_data['balance_due'])}")
                 
-                # Use the multi-item receipt function
                 pdf_buffer = create_multi_item_receipt_pdf(st.session_state.last_rental_data, items)
                 
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
-                    if st.download_button("📄 Download Receipt", data=pdf_buffer,
+                    if st.download_button("Download Receipt", data=pdf_buffer,
                                          file_name=f"receipt_{st.session_state.last_rental_data['rental_id']}.pdf",
                                          mime="application/pdf", key="download_receipt"):
                         st.balloons()
@@ -958,7 +828,7 @@ def main():
                     st.rerun()
     
     # ========================================================================
-    # ACTIVE RENTALS (Multi-Item Support)
+    # ACTIVE RENTALS
     # ========================================================================
     
     elif menu == "Active Rentals":
@@ -985,11 +855,10 @@ def main():
                         st.write(f"**Return Date:** {rental['return_date']}")
                         days_left = (rental['return_date'] - datetime.date.today()).days
                         if days_left >= 0:
-                            st.info(f"⏰ {days_left} days left until return")
+                            st.info(f"{days_left} days left until return")
                         else:
-                            st.warning(f"⚠️ Rental is {abs(days_left)} days overdue!")
+                            st.warning(f"Rental is {abs(days_left)} days overdue!")
                     
-                    # Show items
                     st.write("**Items Rented:**")
                     items = json.loads(rental['items_list'])
                     for item in items:
@@ -1035,19 +904,17 @@ def main():
                     st.write(f"**Deposit Paid:** {format_kes(rental_data['deposit_paid'])}")
                     st.write(f"**Balance Due:** {format_kes(rental_data['balance_due'])}")
                 
-                # Show items
                 st.write("**Items Rented:**")
                 items = json.loads(rental_data['items_list'])
                 for item in items:
                     st.write(f"  • {item['item_name']}")
                 
-                # Calculate late fees (per item)
                 today = datetime.date.today()
                 late_fee = 0
                 if today > rental_data['return_date']:
                     days_late = (today - rental_data['return_date']).days
                     late_fee = days_late * 500 * len(items)
-                    st.warning(f"⚠️ {days_late} days late. Late fee: {format_kes(late_fee)}")
+                    st.warning(f"{days_late} days late. Late fee: {format_kes(late_fee)}")
                 
                 col3, col4 = st.columns(2)
                 with col3:
@@ -1060,19 +927,17 @@ def main():
                                                    step=500.0)
                 
                 total_due = rental_data['balance_due'] + late_fee + damage_fee
-                st.info(f"💰 Total amount due: {format_kes(total_due)}")
+                st.info(f"Total amount due: {format_kes(total_due)}")
                 
                 if balance_paid < total_due:
-                    st.warning(f"⚠️ Short payment of {format_kes(total_due - balance_paid)}")
+                    st.warning(f"Short payment of {format_kes(total_due - balance_paid)}")
                 elif balance_paid > total_due:
-                    st.success(f"💰 Overpayment of {format_kes(balance_paid - total_due)} (refund to customer)")
+                    st.success(f"Overpayment of {format_kes(balance_paid - total_due)} (refund to customer)")
                 
                 if st.button("Process Return & Clear Balance"):
-                    # Update rental status
                     st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'status'] = 'Completed'
                     st.session_state.rentals.loc[st.session_state.rentals['rental_id'] == rental_id, 'balance_due'] = 0
                     
-                    # Update inventory for all items
                     for item in items:
                         item_index = st.session_state.inventory[st.session_state.inventory['item_id'] == item['item_id']].index
                         if len(item_index) > 0:
@@ -1082,14 +947,14 @@ def main():
                     fix_dataframe_dtypes()
                     save_data()
                     
-                    st.success("✅ Return processed successfully!")
+                    st.success("Return processed successfully!")
                     
                     if balance_paid > total_due:
-                        st.info(f"💰 Refund due to customer: {format_kes(balance_paid - total_due)}")
+                        st.info(f"Refund due to customer: {format_kes(balance_paid - total_due)}")
                     elif balance_paid < total_due:
-                        st.warning(f"⚠️ Outstanding balance: {format_kes(total_due - balance_paid)}")
+                        st.warning(f"Outstanding balance: {format_kes(total_due - balance_paid)}")
                     else:
-                        st.success("✅ Balance fully cleared!")
+                        st.success("Balance fully cleared!")
                     
                     st.balloons()
                     st.rerun()
@@ -1127,7 +992,6 @@ def main():
                         st.write(f"**Return Date:** {rental['return_date']}")
                         st.write(f"**Status:** {rental['status']}")
                     
-                    # Show items
                     st.write("**Items Rented:**")
                     items = json.loads(rental['items_list'])
                     for item in items:
@@ -1137,9 +1001,8 @@ def main():
                     st.write(f"**Deposit Paid:** {format_kes(rental['deposit_paid'])}")
                     st.write(f"**Balance Due:** {format_kes(rental['balance_due'])}")
             
-            # Statistics
             st.markdown("---")
-            st.subheader("📈 Rental Statistics")
+            st.subheader("Rental Statistics")
             
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -1164,35 +1027,32 @@ def main():
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🗑️ Clear All Data", type="secondary"):
-                # Clear inventory
+            if st.button("Clear All Data", type="secondary"):
                 st.session_state.inventory = pd.DataFrame(columns=[
                     'item_id', 'item_name', 'category', 'brand', 'model', 
                     'serial_number', 'daily_rate', 'status', 'current_renter'
                 ])
                 
-                # Clear rentals
                 st.session_state.rentals = pd.DataFrame(columns=[
                     'rental_id', 'customer_name', 'customer_email', 'customer_phone',
                     'items_list', 'total_cost', 'deposit_paid', 'balance_due', 
                     'rental_date', 'return_date', 'status'
                 ])
                 
-                # Load fresh sample data
                 load_sample_data()
                 fix_dataframe_dtypes()
                 save_data()
                 
-                st.success("✅ All data has been cleared and sample data loaded!")
+                st.success("All data has been cleared and sample data loaded!")
                 st.balloons()
                 st.rerun()
         
         with col2:
-            if st.button("📊 Load Sample Data Only"):
+            if st.button("Load Sample Data Only"):
                 load_sample_data()
                 fix_dataframe_dtypes()
                 save_data()
-                st.success("✅ Sample data loaded!")
+                st.success("Sample data loaded!")
                 st.rerun()
         
         st.markdown("---")
@@ -1200,9 +1060,9 @@ def main():
         
         col3, col4 = st.columns(2)
         with col3:
-            st.metric("📦 Inventory Items", len(st.session_state.inventory))
+            st.metric("Inventory Items", len(st.session_state.inventory))
         with col4:
-            st.metric("📝 Rental Records", len(st.session_state.rentals))
+            st.metric("Rental Records", len(st.session_state.rentals))
 
 # ============================================================================
 # RUN THE APP
